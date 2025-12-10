@@ -1035,3 +1035,221 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnCopySummary) btnCopySummary.addEventListener('click', copySummary);
 });
 script.js
+/* ADDITION: Helpers appended to the end of script.js
+   - safe migration for auraLogRaw
+   - updateGemVisual
+   - logAuraNumberForToday / compute dominant aura
+   - small bloom trigger helper
+*/
+
+/* ANGEL_MEANINGS: short sample messages per base digit */
+const ANGEL_MEANINGS = {
+  2: [
+    "Support is here; let your roots deepen.",
+    "Balance your soft yes with a gentle no.",
+    "Trust small consistent steps."
+  ],
+  3: [
+    "Creative spark — open to small experiments.",
+    "Speak your truth kindly; ideas will follow.",
+    "Play and curiosity will lead you forward."
+  ],
+  4: [
+    "Grounding energy — tend your foundations.",
+    "Practical care now pays off in calm later.",
+    "Slow, steady work builds lasting comfort."
+  ],
+  5: [
+    "Change is active; lean into curiosity.",
+    "A shift invites new options — try one small pivot.",
+    "Movement and adaptability will serve you."
+  ]
+};
+
+/* Safe migration: ensure auraLogRaw exists without removing existing auraNumbers
+   This will run once on load if needed. */
+(function ensureMigration() {
+  if (!data || !data.days) return;
+  let migrated = false;
+  for (const key of Object.keys(data.days)) {
+    const day = data.days[key];
+    if (!Array.isArray(day.auraLogRaw)) {
+      // If there's an existing auraNumbers array, copy it into auraLogRaw (preserve chronological)
+      day.auraLogRaw = Array.isArray(day.auraNumbers) ? day.auraNumbers.slice() : [];
+      migrated = true;
+    }
+  }
+  if (migrated) {
+    try { saveData(); } catch(e) { /* swallow */ }
+  }
+})();
+
+/* utility: normalize a logged aura string like '222' or 222 to base digit (2..5) */
+function baseDigitFromString(val) {
+  const s = String(val).trim();
+  if (!s) return null;
+  // find the first repeating character if all are the same (e.g., '222' -> '2'), otherwise take last char
+  const firstChar = s[0];
+  if (s.split('').every(ch => ch === firstChar)) return parseInt(firstChar, 10);
+  // fallback: look for digit 2-5 in the string
+  const m = s.match(/[2-5]/);
+  return m ? parseInt(m[0], 10) : null;
+}
+
+/* log an aura number for today; adds to auraLogRaw and ensures unique auraNumbers set */
+function logAuraNumberForToday(numRaw) {
+  const key = todayKey();
+  ensureDay(key);
+  const day = data.days[key];
+
+  const normalized = String(numRaw).trim();
+  if (!normalized) return;
+
+  if (!Array.isArray(day.auraLogRaw)) day.auraLogRaw = [];
+  day.auraLogRaw.push(normalized);
+
+  // auraNumbers: unique base digits seen that day (2,3,4,5)
+  const base = baseDigitFromString(normalized);
+  if (base && !Array.isArray(day.auraNumbers)) day.auraNumbers = [];
+  if (base && !day.auraNumbers.includes(base)) day.auraNumbers.push(base);
+
+  // append a short message line to auraNote with chosen meaning
+  try {
+    const meanings = ANGEL_MEANINGS[base] || ["An angelic whisper."];
+    const msg = meanings[Math.floor(Math.random()*meanings.length)];
+    const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    day.auraNote = (day.auraNote || "") + `[${time}] ${normalized}: ${msg}\n`;
+  } catch(e) {}
+
+  saveData();
+  applyAuraToDom(key);
+}
+
+/* compute dominant color class from auraLogRaw (most frequent base digit) */
+function computeAuraDominantClass(key) {
+  ensureDay(key);
+  const day = data.days[key];
+  if (!Array.isArray(day.auraLogRaw) || day.auraLogRaw.length === 0) return 'theme-neutral';
+
+  const counts = {2:0,3:0,4:0,5:0};
+  for (const raw of day.auraLogRaw) {
+    const b = baseDigitFromString(raw);
+    if (b >=2 && b <=5) counts[b] = (counts[b]||0) + 1;
+  }
+  // find highest
+  let topDigit = null;
+  let topCount = 0;
+  for (const d of [2,3,4,5]) {
+    if (counts[d] > topCount) {
+      topCount = counts[d];
+      topDigit = d;
+    }
+  }
+  if (!topDigit) return 'theme-neutral';
+  if (topDigit === 2) return 'theme-papaya';
+  if (topDigit === 3) return 'theme-fig';
+  if (topDigit === 4) return 'theme-vervain';
+  if (topDigit === 5) return 'theme-dusty';
+  return 'theme-neutral';
+}
+
+/* apply aura class to DOM orb and update title/tooltip */
+function applyAuraToDom(key) {
+  const orb = document.getElementById('auraOrb');
+  if (!orb) return;
+  const cls = computeAuraDominantClass(key);
+  orb.classList.remove('theme-papaya','theme-fig','theme-vervain','theme-dusty','theme-neutral');
+  orb.classList.add(cls);
+  // toggle halo opacity based on whether there are aura entries
+  ensureDay(key);
+  const day = data.days[key];
+  orb.style.transform = day.auraLogRaw && day.auraLogRaw.length ? 'scale(1.02)' : '';
+  orb.title = `Angel Aura Orb — ${day.auraLogRaw ? day.auraLogRaw.join(', ') : ''}`;
+}
+
+/* Update gem visuals (call this after changes to today's gem) */
+function updateGemVisual(key) {
+  const k = key || todayKey();
+  ensureDay(k);
+  const day = data.days[k];
+  const facets = Math.max(0, Math.min(NUM_FACETS, day.gemFacets || 0));
+  const percent = Math.min(100, Math.round((facets / DAILY_GEM_TARGET) * 100));
+  const fillEl = document.getElementById('gemFill');
+  const visualFill = document.getElementById('gemVisualFill');
+  if (fillEl) fillEl.style.width = percent + '%';
+  if (visualFill) {
+    visualFill.classList.remove('gem-shimmer','gem-full');
+    if (facets > 0) visualFill.classList.add('gem-shimmer');
+    if (facets >= DAILY_GEM_TARGET) {
+      // first time completion: increment shrine level once
+      if (!day.gemCompleted) {
+        day.gemCompleted = true;
+        data.shrine = data.shrine || { level: 0, placed: [] };
+        // increment but don't exceed available items
+        const newLevel = Math.min((data.shrine.level || 0) + 1, SHRINE_ITEMS.length);
+        data.shrine.level = newLevel;
+      }
+      visualFill.classList.add('gem-full');
+    } else {
+      day.gemCompleted = false;
+    }
+  }
+  saveData();
+}
+
+/* small helper to trigger bloom pop on elements that become bloomed
+   expects bloom tiles to addClass 'bloomed' — this will make sure animation runs */
+function triggerBloomAnimation(tileEl) {
+  if (!tileEl) return;
+  tileEl.classList.remove('bloomed');
+  // force reflow to restart animation
+  // eslint-disable-next-line no-unused-expressions
+  tileEl.offsetWidth;
+  tileEl.classList.add('bloomed');
+}
+
+/* wire a click on the orb to open a small prompt for quick testing (non-blocking)
+   This is intentionally minimal: replace with your modal integration as needed */
+document.addEventListener('DOMContentLoaded', function () {
+  // apply aura for today on load
+  applyAuraToDom(todayKey());
+
+  const orb = document.getElementById('auraOrb');
+  if (orb) {
+    orb.addEventListener('click', function () {
+      const val = prompt('Log an angel number (e.g., 222, 333, 444, 555):');
+      if (val) {
+        logAuraNumberForToday(val);
+        applyAuraToDom(todayKey());
+        alert('Logged ' + val);
+      }
+    });
+  }
+
+  // initial gem visual sync
+  updateGemVisual(todayKey());
+
+  // observe possible gem DOM button actions if present (non intrusive)
+  document.addEventListener('click', function (e) {
+    const t = e.target;
+    if (!t) return;
+    // example small convenience: if a button has data-action="addGem" we'll increment gem
+    if (t.dataset && t.dataset.action === 'addGem') {
+      const k = todayKey();
+      ensureDay(k);
+      data.days[k].gemFacets = (data.days[k].gemFacets || 0) + 1;
+      saveData();
+      updateGemVisual(k);
+    }
+    // if a bloom toggle button (data-action="bloomToday"), mark today's bloom and trigger animation
+    if (t.dataset && t.dataset.action === 'bloomToday') {
+      const k = todayKey();
+      ensureDay(k);
+      data.days[k].bloom = true;
+      saveData();
+      // try to find a tile for today and animate
+      const tile = document.querySelector('.bloom-tile.today');
+      if (tile) triggerBloomAnimation(tile);
+    }
+  });
+});
