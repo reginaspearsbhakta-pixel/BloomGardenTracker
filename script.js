@@ -63,6 +63,7 @@ function ensureDay(key) {
       brickNotes: "",
       tarotId: null,
       auraNumbers: [],
+      auraLogRaw: [],
       auraNote: ""
     };
   } else {
@@ -75,6 +76,7 @@ function ensureDay(key) {
     if (typeof d.brickNotes !== 'string') d.brickNotes = '';
     if (!('tarotId' in d)) d.tarotId = null;
     if (!Array.isArray(d.auraNumbers)) d.auraNumbers = [];
+    if (!Array.isArray(d.auraLogRaw)) d.auraLogRaw = [];
     if (typeof d.auraNote !== 'string') d.auraNote = '';
   }
   if (!data.shrine) data.shrine = { level: 0, placed: [] };
@@ -260,22 +262,34 @@ const ANGEL_MEANINGS = {
   ]
 };
 
+function getAngelBase(n) {
+  if (!n && n !== 0) return null;
+  const str = String(n);
+  const uniqueDigit = str.split('').every(ch => ch === str[0]) ? parseInt(str[0], 10) : null;
+  if (uniqueDigit && [2, 3, 4, 5].includes(uniqueDigit)) return uniqueDigit;
+  if ([2, 22, 222, 2222].includes(n)) return 2;
+  if ([3, 33, 333, 3333].includes(n)) return 3;
+  if ([4, 44, 444, 4444].includes(n)) return 4;
+  if ([5, 55, 555, 5555].includes(n)) return 5;
+  return null;
+}
+
 function angelColorForNumber(n) {
-  if (n === 2 || n === 22) return 'papaya';
-  if (n === 3 || n === 33) return 'fig';
-  if (n === 4 || n === 44) return 'vervain';
-  if (n === 5 || n === 55) return 'dusty';
+  const base = getAngelBase(n);
+  if (base === 2) return 'papaya';
+  if (base === 3) return 'fig';
+  if (base === 4) return 'vervain';
+  if (base === 5) return 'dusty';
   return null;
 }
 
 function getAuraThemeAndLayers(nums) {
   if (!nums || !nums.length) return { theme: 'neutral', layers: [] };
-  const set = new Set(nums);
   const layers = [];
-  if ([2,22].some(n => set.has(n))) layers.push('papaya');
-  if ([3,33].some(n => set.has(n))) layers.push('fig');
-  if ([4,44].some(n => set.has(n))) layers.push('vervain');
-  if ([5,55].some(n => set.has(n))) layers.push('dusty');
+  nums.forEach(n => {
+    const color = angelColorForNumber(n);
+    if (color && !layers.includes(color)) layers.push(color);
+  });
   if (!layers.length) return { theme: 'neutral', layers: [] };
   if (layers.length === 1) return { theme: layers[0], layers };
   return { theme: 'mix', layers };
@@ -287,6 +301,7 @@ function renderAuraOrb() {
   const key = todayKey();
   ensureDay(key);
   const auraNums = data.days[key].auraNumbers || [];
+  const auraLog = data.days[key].auraLogRaw || [];
   const count = auraNums.length;
   let level = 0;
   if (count >= 1) level = 1;
@@ -295,7 +310,15 @@ function renderAuraOrb() {
   if (count >= 4) level = 4;
 
   const { theme } = getAuraThemeAndLayers(auraNums);
-  orb.className = 'aura-orb level-' + level + ' theme-' + theme + (auraNums.length ? ' active' : '');
+  const dominantCounts = { papaya: 0, fig: 0, vervain: 0, dusty: 0 };
+  auraLog.forEach(n => {
+    const color = angelColorForNumber(n);
+    if (color && dominantCounts[color] !== undefined) dominantCounts[color] += 1;
+  });
+  const dominantEntry = Object.entries(dominantCounts).reduce((best, cur) => cur[1] > best[1] ? cur : best, ['none', 0]);
+  const dominant = dominantEntry[1] > 0 ? dominantEntry[0] : null;
+
+  orb.className = 'aura-orb level-' + level + ' theme-' + theme + (auraNums.length ? ' active' : '') + (dominant ? (' dominant-' + dominant) : '');
 }
 
 function renderOrbChips(nums) {
@@ -365,9 +388,13 @@ function attachOrbHandlers() {
       numbers.forEach(n => uniqueSet.add(n));
       data.days[key].auraNumbers = Array.from(uniqueSet.values()).sort((a,b) => a-b);
 
+      if (!Array.isArray(data.days[key].auraLogRaw)) data.days[key].auraLogRaw = [];
+      numbers.forEach(n => data.days[key].auraLogRaw.push(n));
+
       // Build fresh reflection line(s) for every entry, even repeats
       const snippets = numbers.map(n => {
-        const meanings = ANGEL_MEANINGS[n];
+        const base = getAngelBase(n) || n;
+        const meanings = ANGEL_MEANINGS[base];
         if (Array.isArray(meanings) && meanings.length) {
           const pick = meanings[Math.floor(Math.random() * meanings.length)];
           return `${n}: ${pick}`;
@@ -378,6 +405,7 @@ function attachOrbHandlers() {
 
       const line = "• " + snippets.join(" | ");
       note.value = (note.value ? note.value + "\n" : "") + line;
+      data.days[key].auraNote = note.value;
       input.value = '';
 
       saveData();
@@ -394,6 +422,15 @@ function attachOrbHandlers() {
       saveData();
       renderAuraOrb();
       if (modal) modal.classList.remove('visible');
+    });
+  }
+
+  if (note) {
+    note.addEventListener('input', () => {
+      const key = todayKey();
+      ensureDay(key);
+      data.days[key].auraNote = note.value || '';
+      saveData();
     });
   }
 }
@@ -476,11 +513,13 @@ function isGemFullForKey(key) {
 function handleGemFullTransition(key, wasFull, isFull) {
   if (!wasFull && isFull) {
     ensureDay(key);
-    data.days[key].gemCompleted = true;
-    if (data.shrine.level < SHRINE_ITEMS.length) {
-      data.shrine.level += 1;
+    if (!data.days[key].gemCompleted) {
+      data.days[key].gemCompleted = true;
+      if (data.shrine.level < SHRINE_ITEMS.length) {
+        data.shrine.level += 1;
+      }
+      saveData();
     }
-    saveData();
   }
 }
 
@@ -490,6 +529,7 @@ function setGemWins(count) {
   const wasFull = isGemFullForKey(key);
   const safe = Math.max(0, count);
   data.days[key].gemFacets = safe;
+  if (safe < DAILY_GEM_TARGET) data.days[key].gemCompleted = false;
   const isFull = isGemFullForKey(key);
   handleGemFullTransition(key, wasFull, isFull);
   saveData();
@@ -742,6 +782,9 @@ function generateSummary() {
   if (todayData.auraNumbers && todayData.auraNumbers.length) {
     lines.push(`- Angel numbers seen today: ${todayData.auraNumbers.join(', ')}`);
   }
+  if (todayData.auraLogRaw && todayData.auraLogRaw.length) {
+    lines.push(`- All angel entries today: ${todayData.auraLogRaw.join(', ')}`);
+  }
   if (todayData.auraNote) {
     lines.push(`- Aura orb journal: ${todayData.auraNote}`);
   }
@@ -885,6 +928,7 @@ function render() {
   const gemFill = document.getElementById('gemFill');
   const gemText = document.getElementById('gemText');
   const gemVisualFill = document.getElementById('gemVisualFill');
+  const gemVisualOutline = document.querySelector('.gem-visual-outline');
 
   gemRow.innerHTML = '';
   const winsToday = data.days[today].gemFacets || 0;
@@ -910,6 +954,14 @@ function render() {
 
   if (gemVisualFill) {
     gemVisualFill.style.height = gemPercent + '%';
+  }
+  if (gemVisualOutline) {
+    gemVisualOutline.className = 'gem-visual-outline';
+    if (gemPercent >= 100) gemVisualOutline.classList.add('gem-intensity-4');
+    else if (gemPercent >= 75) gemVisualOutline.classList.add('gem-intensity-3');
+    else if (gemPercent >= 50) gemVisualOutline.classList.add('gem-intensity-2');
+    else if (gemPercent >= 25) gemVisualOutline.classList.add('gem-intensity-1');
+    else gemVisualOutline.classList.add('gem-intensity-0');
   }
 
   gemText.textContent = `Little wins: ${winsToday} • Gem ${Math.round(gemPercent)}% charged`;
