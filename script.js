@@ -1034,3 +1034,4 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnGenerateSummary) btnGenerateSummary.addEventListener('click', generateSummary);
   if (btnCopySummary) btnCopySummary.addEventListener('click', copySummary);
 });
+script.js
