@@ -1,12 +1,12 @@
-/* Regina Era Tracker - clean front-end rewrite
-   Features:
-   - Daily Gem
-   - Weekly Garden
-   - Brick Wall
-   - Daily Tarot
-   - Angel Aura Orb
+/* Regina Era Tracker - visual & tone upgrade
+   Updates:
+   - improved gem fill + shimmer + full glow
+   - garden flowers with grow animation
+   - tarot front glyphs rendered as small SVGs
+   - tailored tarot & angel number messages (addressed to you)
+   - orb visual variants and pulse tied to logged numbers
 
-   Storage key: 'reginaEraTracker'
+   Storage key: 'reginaEraTracker' (unchanged)
 */
 
 const STORAGE_KEY = 'reginaEraTracker';
@@ -24,164 +24,95 @@ function loadState() {
   } catch (e) {
     console.error('Failed to parse state', e);
   }
-  // default state
-  return {
-    gem: {},      // { '2025-12-10': { wins: 0, notes: '' } }
-    garden: {},   // { '2025-12-10': { bloomed: true } }
-    bricks: { currentBricks: 0, wallsCompleted: 0 },
-    aura: {},     // { '2025-12-10': { numbers: [], log: [], note: '' } }
-    tarot: {}     // { '2025-12-10': { cardId: 'the-sun' } }
-  };
+  return { gem: {}, garden: {}, bricks: { currentBricks: 0, wallsCompleted: 0 }, aura: {}, tarot: {} };
 }
-function saveState() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch (e) {
-    console.error('Failed to save state', e);
-  }
-}
-function getTodayKey(date = new Date()) {
-  const d = new Date(date.getTime() - date.getTimezoneOffset()*60000);
-  return d.toISOString().slice(0,10);
-}
+function saveState() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { console.error('Failed save', e); } }
+function getTodayKey(date = new Date()) { const d = new Date(date.getTime() - date.getTimezoneOffset()*60000); return d.toISOString().slice(0,10); }
 
-/* in-memory state */
 let state = loadState();
 
-/* ---------------------------
-   Utility: safe ensure day objects
-   --------------------------- */
-function ensureGem(dateKey) {
-  if (!state.gem[dateKey]) state.gem[dateKey] = { wins: 0, notes: '' };
-}
-function ensureGarden(dateKey) {
-  if (!state.garden[dateKey]) state.garden[dateKey] = { bloomed: false };
-}
-function ensureAura(dateKey) {
-  if (!state.aura[dateKey]) state.aura[dateKey] = { numbers: [], log: [], note: '' };
-}
-function ensureTarot(dateKey) {
-  if (!state.tarot[dateKey]) state.tarot[dateKey] = { cardId: null };
-}
+/* ensure functions */
+function ensureGem(k){ if (!state.gem[k]) state.gem[k] = { wins:0, notes:'' }; }
+function ensureGarden(k){ if (!state.garden[k]) state.garden[k] = { bloomed:false }; }
+function ensureAura(k){ if (!state.aura[k]) state.aura[k] = { numbers:[], log:[], note:'' }; }
+function ensureTarot(k){ if (!state.tarot[k]) state.tarot[k] = { cardId:null }; }
 
-/* ---------------------------
-   Tarot cards definition
-   --------------------------- */
+/* ---------------- Tarot cards (with tuned tone) ---------------- */
 const TAROT_CARDS = [
-  { id: 'sun', title: 'The Sun', glyph: '☼', tagline: 'Warmth, clarity', meaning: 'A day of warmth, clarity, and small victories. Focus on what brings light.' },
-  { id: 'moon', title: 'The Moon', glyph: '◐', tagline: 'Intuition, rest', meaning: 'Trust your inner guide. Slow down and listen, dreams carry hints.' },
-  { id: 'star', title: 'The Star', glyph: '✦', tagline: 'Hope, healing', meaning: 'Gentle healing energy. Replenish yourself and share soft light.' },
-  { id: 'hermit', title: 'The Hermit', glyph: '◎', tagline: 'Focus, study', meaning: 'A small retreat fuels insight. Take a quiet hour for deep work.' },
-  { id: 'empress', title: 'The Empress', glyph: '♁', tagline: 'Nurture, steadiness', meaning: 'Tend to your environment and body. Comfort creates momentum.' },
-  { id: 'magus', title: 'The Magus', glyph: '✶', tagline: 'Craft, speak', meaning: 'Your words and craft have effect. Try a clear small action.' },
-  { id: 'temperance', title: 'Temperance', glyph: '△', tagline: 'Balance', meaning: 'Small balance shifts accumulate. Mix routine with small joys.' },
-  { id: 'strength', title: 'Strength', glyph: '♯', tagline: 'Gentle power', meaning: 'Soft discipline wins. Show up and honor limits kindly.' }
+  { id:'sun', title:'The Sun', glyph:'sun', tagline:'Warm clarity', meaning:"You: gentle, bright, and steady. Let small wins light your day — you're carrying sunlight for your little ones and yourself." },
+  { id:'moon', title:'The Moon', glyph:'moon', tagline:'Rest & trust', meaning:"This is a day for trusting your instincts and honoring tiredness. It's okay to withdraw and refuel." },
+  { id:'star', title:'The Star', glyph:'star', tagline:'Soft healing', meaning:"A soft reset: small rituals (tea, rest, tidy corner) help you regroup. Your consistency is the real magic." },
+  { id:'empress', title:'The Empress', glyph:'empress', tagline:'Nurture', meaning:"Tend the people and spaces that feed you. A tiny comfort today pays dividends for your patience." },
+  { id:'magus', title:'The Magus', glyph:'magus', tagline:'Craft & voice', meaning:"Say the thing you mean, then let your work speak. You have more influence than you credit." },
+  { id:'temperance', title:'Temperance', glyph:'balance', tagline:'Blend', meaning:"Balance the urgent with the gentle. Add one small pleasure to your routine and watch it soften the day." },
+  { id:'strength', title:'Strength', glyph:'strength', tagline:'Gentle power', meaning:"Soft boundaries, steady actions. You are strong because you choose the kind track." },
+  { id:'hermit', title:'The Hermit', glyph:'hermit', tagline:'Quiet focus', meaning:"A short focused session (20–40 minutes) will yield more than an all-day pull. Protect that time." }
 ];
 
-/* deterministic index for date */
-function tarotIndexForKey(key) {
-  // simple deterministic hash: sum of char codes
-  let sum = 0;
-  for (let i=0;i<key.length;i++) sum += key.charCodeAt(i);
+function tarotIndexForKey(key){
+  let sum = 0; for (let i=0;i<key.length;i++) sum += key.charCodeAt(i);
   return sum % TAROT_CARDS.length;
 }
 
-/* ---------------------------
-   ANGEL MEANINGS
-   --------------------------- */
+/* ---------- ANGEL MEANINGS — tailored to you ---------- */
 const ANGEL_MEANINGS = {
   '2': [
-    'Support is near — small steady steps matter.',
-    'A reminder to breathe and accept help.',
-    'Balance and gentle structure are supporting you.'
+    "Ask for help today — it's okay; you don't have to hold it all.",
+    "Small routines steady the nervous system. Try two deep breaths before breakfast.",
+    "Balance doesn't mean perfect; it means choosing the kinder path."
   ],
   '3': [
-    'Creative energy spark — try a tiny experiment.',
-    'Play opens new doors; curiosity leads.',
-    'Communication blossoms; say one kind truth.'
+    "Write one honest line about this morning. Your voice matters here.",
+    "Try a tiny creative experiment — 10 minutes, no pressure.",
+    "Speak plainly to a close one; clarity opens space."
   ],
   '4': [
-    'Grounding energy — build one reliable habit.',
-    'Practical care brings comfort later.',
-    'Tend the foundation: rest, food, shelter, rhythm.'
+    "Tend the routines that keep you safe — a small habit today protects tomorrow.",
+    "Boundary check: keep one task off your plate to guard energy.",
+    "A steady, boring system now means more calm later."
   ],
   '5': [
-    'Change approaches — stay curious and adaptive.',
-    'A small pivot opens surprising options.',
-    'Movement and exploration are favored this day.'
+    "Try a tiny pivot — change one minor thing and observe.",
+    "Upgrade a small ritual (tea, playlist) and treat it like a test.",
+    "Movement is the medicine; a short walk invites different choices."
   ]
 };
 
-/* ---------------------------
-   Rendering functions
-   --------------------------- */
-function updateUI() {
-  renderGem();
-  renderGarden();
-  renderWall();
-  renderTarot();
-  renderOrb();
-}
+/* ---------- RENDER / UI ---------- */
+function updateUI(){ renderGem(); renderGarden(); renderWall(); renderTarot(); renderOrb(); }
 
-/* ---------- GEM ---------- */
-function renderGem(dateKey = getTodayKey()) {
+/* GEM */
+function renderGem(dateKey = getTodayKey()){
   ensureGem(dateKey);
+  const wins = state.gem[dateKey].wins || 0;
   const elCount = document.getElementById('gemCount');
   const elFill = document.getElementById('gemFill');
   const elDiamond = document.getElementById('gemDiamond');
   const notes = document.getElementById('gemNotes');
 
-  const wins = state.gem[dateKey].wins || 0;
   if (elCount) elCount.textContent = `${wins} / ${GEM_TARGET}`;
-  if (notes) notes.value = state.gem[dateKey].notes || '';
+  if (notes && state.gem[dateKey]) notes.value = state.gem[dateKey].notes || '';
 
-  // compute fill percent relative to target and set height
-  const pct = Math.max(0, Math.min(100, Math.round((wins / GEM_TARGET) * 100)));
+  const pct = Math.round(Math.max(0, Math.min(100, (wins / GEM_TARGET) * 100)));
   if (elFill) elFill.style.height = pct + '%';
 
-  // classes for shimmer / full
+  // visual classes
   if (elDiamond) {
     elDiamond.classList.toggle('shimmer', wins > 0 && wins < GEM_TARGET);
     elDiamond.classList.toggle('full', wins >= GEM_TARGET);
   }
 }
 
-function gemAdd() {
-  const key = getTodayKey();
-  ensureGem(key);
-  state.gem[key].wins = Math.min(GEM_TARGET, (state.gem[key].wins || 0) + 1);
-  saveState(); updateUI();
-}
-function gemSetFull(){
-  const key = getTodayKey();
-  ensureGem(key);
-  state.gem[key].wins = GEM_TARGET;
-  saveState(); updateUI();
-}
-function gemResetToday(){
-  const key = getTodayKey();
-  ensureGem(key);
-  state.gem[key].wins = 0;
-  state.gem[key].notes = '';
-  saveState(); updateUI();
-}
+function gemAdd(){ const k=getTodayKey(); ensureGem(k); state.gem[k].wins = Math.min(GEM_TARGET, (state.gem[k].wins||0)+1); saveState(); updateUI(); }
+function gemSetFull(){ const k=getTodayKey(); ensureGem(k); state.gem[k].wins = GEM_TARGET; saveState(); updateUI(); }
+function gemResetToday(){ const k=getTodayKey(); ensureGem(k); state.gem[k].wins = 0; state.gem[k].notes=''; saveState(); updateUI(); }
+function gemNotesSave(){ const k=getTodayKey(); ensureGem(k); const notes = document.getElementById('gemNotes'); if (notes) { state.gem[k].notes = notes.value; saveState(); } }
 
-/* save gem notes on blur */
-function gemNotesSave() {
-  const key = getTodayKey();
-  ensureGem(key);
-  const notes = document.getElementById('gemNotes');
-  if (!notes) return;
-  state.gem[key].notes = notes.value;
-  saveState();
-}
-
-/* ---------- GARDEN ---------- */
-function renderGarden() {
+/* GARDEN */
+function renderGarden(){
   const row = document.getElementById('gardenRow');
   if (!row) return;
   row.innerHTML = '';
-  // render last 7 days ending with today
   for (let i = NUM_BLOOMS - 1; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
@@ -190,787 +121,244 @@ function renderGarden() {
     const plot = document.createElement('div');
     plot.className = 'plot';
     plot.dataset.date = key;
-    plot.textContent = new Date(key).toLocaleDateString(undefined, {weekday: 'short'});
+
+    // add bud or flower element
     if (state.garden[key].bloomed) {
+      plot.innerHTML = `<div class="flower" aria-hidden="true"></div><div class="plot-label">${new Date(key).toLocaleDateString(undefined,{weekday:'short'})}</div>`;
       plot.classList.add('bloomed');
+    } else {
+      plot.innerHTML = `<div class="bud" aria-hidden="true"></div><div class="plot-label">${new Date(key).toLocaleDateString(undefined,{weekday:'short'})}</div>`;
     }
+
     plot.addEventListener('click', () => {
       toggleBloom(key, plot);
     });
+
     row.appendChild(plot);
   }
 }
 
-function toggleBloom(key, el) {
+function toggleBloom(key, el){
   ensureGarden(key);
   state.garden[key].bloomed = !state.garden[key].bloomed;
   saveState();
-  if (state.garden[key].bloomed && el) {
-    el.classList.remove('animate');
-    void el.offsetWidth;
-    el.classList.add('animate'); // triggers pop animation
+  if (state.garden[key].bloomed && el){
+    // replace bud with flower then animate
     el.classList.add('bloomed');
+    el.innerHTML = `<div class="flower" aria-hidden="true"></div><div class="plot-label">${new Date(key).toLocaleDateString(undefined,{weekday:'short'})}</div>`;
+    el.classList.remove('animate'); void el.offsetWidth; el.classList.add('animate');
   } else if (el) {
     el.classList.remove('bloomed');
+    el.innerHTML = `<div class="bud" aria-hidden="true"></div><div class="plot-label">${new Date(key).toLocaleDateString(undefined,{weekday:'short'})}</div>`;
   }
   updateUI();
 }
-function bloomToday() {
-  const key = getTodayKey();
-  ensureGarden(key);
-  state.garden[key].bloomed = true;
-  saveState(); updateUI();
-}
 
-/* ---------- WALL ---------- */
-function renderWall() {
+function bloomToday(){ const k=getTodayKey(); ensureGarden(k); state.garden[k].bloomed = true; saveState(); updateUI(); }
+
+/* WALL (unchanged behavior) */
+function renderWall(){
   const container = document.getElementById('wallGrid');
   const label = document.getElementById('wallLabel');
   const completed = document.getElementById('wallsCompleted');
   if (!container) return;
   container.innerHTML = '';
   const count = state.bricks.currentBricks || 0;
-  for (let i = 0; i < NUM_BRICKS; i++) {
-    const b = document.createElement('div');
+  for (let i=0;i<NUM_BRICKS;i++){
+    const b=document.createElement('div');
     b.className = 'brick' + (i < count ? ' filled' : '');
-    b.textContent = (i < count) ? '' : '';
     container.appendChild(b);
   }
   if (label) label.textContent = `${count} / ${NUM_BRICKS}`;
   if (completed) completed.textContent = `Walls completed: ${state.bricks.wallsCompleted || 0}`;
 }
+function addBrick(){ state.bricks.currentBricks = Math.min(NUM_BRICKS, (state.bricks.currentBricks||0)+1); saveState(); updateUI(); }
+function completeWall(){ if ((state.bricks.currentBricks||0) >= NUM_BRICKS){ state.bricks.wallsCompleted = (state.bricks.wallsCompleted||0)+1; state.bricks.currentBricks = 0; saveState(); updateUI(); } else { alert('You must have 12 bricks to complete the wall.'); } }
+function resetWall(){ state.bricks.currentBricks = 0; saveState(); updateUI(); }
 
-function addBrick() {
-  state.bricks.currentBricks = Math.min(NUM_BRICKS, (state.bricks.currentBricks || 0) + 1);
-  saveState(); updateUI();
-}
-function completeWall() {
-  if ((state.bricks.currentBricks || 0) >= NUM_BRICKS) {
-    state.bricks.wallsCompleted = (state.bricks.wallsCompleted || 0) + 1;
-    state.bricks.currentBricks = 0;
-    saveState(); updateUI();
-  } else {
-    // if not full, do nothing (or we could prompt)
-    // For clarity, we simply set to full and complete
-    // but keep to spec: require 12 to complete
-    alert('You must have 12 bricks to complete the wall.');
-  }
-}
-function resetWall() {
-  state.bricks.currentBricks = 0;
-  saveState(); updateUI();
-}
-
-/* ---------- TAROT ---------- */
-function renderTarot(dateKey = getTodayKey()) {
+/* TAROT: render and modal with a small CSS/SVG front visual */
+function renderTarot(dateKey = getTodayKey()){
   ensureTarot(dateKey);
-  const cardField = document.getElementById('tarotCard');
-  const title = document.getElementById('tarotTitle');
-  const tagline = document.getElementById('tarotTagline');
-  const glyph = document.getElementById('tarotGlyph');
-
-  // choose deterministic card and persist for the day
-  if (!state.tarot[dateKey].cardId) {
-    const idx = tarotIndexForKey(dateKey);
-    state.tarot[dateKey].cardId = TAROT_CARDS[idx].id;
+  if (!state.tarot[dateKey].cardId){
+    state.tarot[dateKey].cardId = TAROT_CARDS[tarotIndexForKey(dateKey)].id;
     saveState();
   }
-  const card = TAROT_CARDS.find(c => c.id === state.tarot[dateKey].cardId) || TAROT_CARDS[0];
-  if (title) title.textContent = card.title;
-  if (tagline) tagline.textContent = card.tagline;
-  if (glyph) glyph.textContent = card.glyph;
+  const card = TAROT_CARDS.find(c=>c.id===state.tarot[dateKey].cardId) || TAROT_CARDS[0];
+  document.getElementById('tarotTitle').textContent = card.title;
+  document.getElementById('tarotTagline').textContent = card.tagline;
+  // render a small SVG glyph into tarotGlyph
+  const glyphEl = document.getElementById('tarotGlyph');
+  if (glyphEl) glyphEl.innerHTML = glyphSVGFor(card.glyph);
 }
+function glyphSVGFor(name){
+  // small simple glyphs tuned to palette
+  const common = `width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"`;
+  if (name === 'sun') {
+    return `<svg ${common}><defs><radialGradient id="g1"><stop offset="0%" stop-color="${escapeCssVar('--marigold')||'#D4AF37'}"/><stop offset="100%" stop-color="${escapeCssVar('--papaya')||'#BD6809'}"/></radialGradient></defs><circle cx="30" cy="30" r="10" fill="url(#g1)"/></svg>`;
+  }
+  if (name === 'moon') {
+    return `<svg ${common}><path d="M36 30a12 12 0 1 1-20 10 16 16 0 0 0 20-10z" fill="${getCssHex('--berry-2','#9A3F4A')}" opacity="0.9"/></svg>`;
+  }
+  if (name === 'star') {
+    return `<svg ${common}><polygon points="30,6 35,26 56,26 38,36 44,56 30,44 16,56 22,36 4,26 25,26" fill="${getCssHex('--berry','#7a2f3a')}" opacity="0.9"/></svg>`;
+  }
+  if (name === 'empress') {
+    return `<svg ${common}><rect x="12" y="12" width="36" height="36" rx="6" fill="${getCssHex('--vervain','#11321c')}" opacity="0.9"/></svg>`;
+  }
+  if (name === 'magus') {
+    return `<svg ${common}><circle cx="30" cy="30" r="18" stroke="${getCssHex('--papaya','#BD6809')}" stroke-width="4" fill="none"/></svg>`;
+  }
+  if (name === 'balance') {
+    return `<svg ${common}><line x1="10" y1="30" x2="50" y2="30" stroke="${getCssHex('--dusty-blue','#3C4A63')}" stroke-width="4"/><circle cx="20" cy="36" r="4" fill="${getCssHex('--marigold','#D4AF37')}" /><circle cx="40" cy="24" r="4" fill="${getCssHex('--berry','#7a2f3a')}" /></svg>`;
+  }
+  if (name === 'strength') {
+    return `<svg ${common}><path d="M20 44c6-12 20-12 26 0" stroke="${getCssHex('--berry','#7a2f3a')}" stroke-width="6" fill="none" stroke-linecap="round"/></svg>`;
+  }
+  // hermit fallback
+  return `<svg ${common}><circle cx="30" cy="30" r="12" fill="${getCssHex('--dusty-blue','#3C4A63')}"/></svg>`;
+}
+function escapeCssVar(name){ try{ return getComputedStyle(document.documentElement).getPropertyValue(name).trim() }catch(e){return ''} }
+function getCssHex(varName, fallback){ const val = escapeCssVar(varName); return val || fallback; }
 
-/* tarot modal */
-function openTarotModal() {
-  const key = getTodayKey();
-  ensureTarot(key);
-  const card = TAROT_CARDS.find(c => c.id === state.tarot[key].cardId) || TAROT_CARDS[0];
-  document.getElementById('modalTarotTitle').textContent = card.title;
-  document.getElementById('modalTarotGlyph').textContent = card.glyph;
-  document.getElementById('modalTarotMeaning').textContent = card.meaning;
-  document.getElementById('modalTarot').classList.remove('hidden');
-}
-function closeTarotModal() {
-  document.getElementById('modalTarot').classList.add('hidden');
-}
+function openTarotModal(){ const k=getTodayKey(); ensureTarot(k); const card = TAROT_CARDS.find(c=>c.id===state.tarot[k].cardId) || TAROT_CARDS[0]; document.getElementById('modalTarotTitle').textContent = card.title; document.getElementById('modalTarotGlyph').innerHTML = glyphSVGFor(card.glyph); document.getElementById('modalTarotMeaning').textContent = card.meaning; document.getElementById('modalTarot').classList.remove('hidden'); }
+function closeTarotModal(){ document.getElementById('modalTarot').classList.add('hidden'); }
 
 /* ---------- ORB / AURA ---------- */
-function renderOrb() {
+function renderOrb(){
   const orb = document.getElementById('auraOrb');
   const summary = document.getElementById('auraSummary');
   const today = getTodayKey();
   ensureAura(today);
-  const btn = document.getElementById('btnOpenAura');
-
-  // compute unique numbers and dominant
   const numbers = state.aura[today].numbers || [];
-  const log = state.aura[today].log || [];
   const note = state.aura[today].note || '';
-  if (summary) {
-    if (numbers.length === 0) summary.textContent = 'No aura numbers logged today';
-    else summary.textContent = `Today: ${numbers.join(', ')}`;
-  }
+  if (summary) summary.textContent = numbers.length ? `Today: ${numbers.join(', ')}` : 'No aura numbers logged today';
 
-  // apply color classes or gradient depending on numbers
-  if (orb) {
-    orb.classList.remove('papaya','berry','vervain','dusty','pulse');
-    if (numbers.length === 0) {
-      // neutral default
-      orb.style.background = 'radial-gradient(circle at 30% 30%, rgba(189,104,9,0.95), rgba(154,63,74,0.9))';
+  if (!orb) return;
+  // reset classes
+  orb.classList.remove('papaya','berry','vervain','dusty','pulse','variant-vervain','variant-papaya','variant-berry');
+  orb.style.background = '';
+  if (numbers.length === 0) {
+    orb.style.background = 'radial-gradient(circle at 30% 30%, rgba(189,104,9,0.95), rgba(154,63,74,0.9))';
+    orb.setAttribute('aria-pressed','false');
+  } else {
+    orb.setAttribute('aria-pressed','true');
+    // dominant number determines variant class
+    const dominant = computeAuraDominant(today);
+    if (numbers.length === 1) {
+      const cls = dominant === 2 ? 'papaya' : dominant === 3 ? 'berry' : dominant === 4 ? 'vervain' : 'dusty';
+      orb.classList.add(cls);
+      orb.classList.add('pulse');
+      // add variant for subtle pattern
+      if (dominant === 4) orb.classList.add('variant-vervain');
+      if (dominant === 2) orb.classList.add('variant-papaya');
+      if (dominant === 3) orb.classList.add('variant-berry');
     } else {
-      // map base digits to colors and blend if multiple
-      const colorMap = { '2': 'var(--papaya)', '3': 'var(--berry)', '4': 'var(--vervain)', '5': 'var(--dusty-blue)' };
-      if (numbers.length === 1) {
-        const cls = numbers[0] === 2 ? 'papaya' : numbers[0] === 3 ? 'berry' : numbers[0] === 4 ? 'vervain' : 'dusty';
-        orb.classList.add(cls);
-        orb.classList.add('pulse');
-      } else {
-        // create a small gradient blend
-        const stops = numbers.map((n,i) => `${colorMap[String(n)]} ${Math.round((i/(numbers.length))*100)}%`);
-        orb.style.background = `linear-gradient(135deg, ${stops.join(',')})`;
-        orb.classList.add('pulse');
-      }
+      // blend colors for multiple digits
+      const colorMap = {2:getCssHex('--papaya','#BD6809'), 3:getCssHex('--berry','#7a2f3a'), 4:getCssHex('--vervain','#11321c'), 5:getCssHex('--dusty-blue','#3C4A63')};
+      const stops = numbers.map((n,i)=>`${colorMap[n]} ${Math.round((i/(numbers.length-1))*100)}%`);
+      orb.style.background = `linear-gradient(135deg, ${stops.join(',')})`;
+      orb.classList.add('pulse');
     }
   }
-
-  // update modal log if open
+  // update modal log if visible
   const logEl = document.getElementById('auraLog');
   if (logEl) logEl.textContent = note || '';
 }
 
-/* parse a number string to its base digit (2-5) for repeating-digit forms */
-function baseDigit(s) {
-  if (s === null || s === undefined) return null;
+function computeAuraDominant(dateKey){
+  ensureAura(dateKey);
+  const arr = state.aura[dateKey].log || [];
+  if (!arr.length) return null;
+  const counts = {2:0,3:0,4:0,5:0};
+  for (const s of arr){
+    const b = baseDigit(s);
+    if (b>=2 && b<=5) counts[b]++;
+  }
+  let top=2, max=counts[2];
+  for (const d of [3,4,5]) if (counts[d] > max) { max=counts[d]; top=d; }
+  return top;
+}
+
+function baseDigit(s){
+  if (!s && s!==0) return null;
   const str = String(s).trim();
   if (!str) return null;
-  // if all characters same (e.g., 222, 333)
-  if (str.split('').every(ch => ch === str[0])) {
-    const n = parseInt(str[0], 10);
-    if (n >= 2 && n <= 5) return n;
+  // repeating pattern -> base digit
+  if (str.split('').every(ch=>ch===str[0])) {
+    const n = parseInt(str[0],10);
+    if (n>=2 && n<=5) return n;
   }
-  // fallback: find first digit 2-5
   const m = str.match(/[2-5]/);
   return m ? parseInt(m[0],10) : null;
 }
 
-/* open/close aura modal */
-function openAuraModal() {
-  const modal = document.getElementById('modalAura');
-  const input = document.getElementById('auraInput');
-  const today = getTodayKey();
-  ensureAura(today);
-  // populate log
-  document.getElementById('auraLog').textContent = state.aura[today].note || '';
-  if (modal) modal.classList.remove('hidden');
-  if (input) input.value = '';
-}
-function closeAuraModal() {
-  const modal = document.getElementById('modalAura');
-  if (modal) modal.classList.add('hidden');
-}
+function openAuraModal(){ const modal = document.getElementById('modalAura'); const input = document.getElementById('auraInput'); const today = getTodayKey(); ensureAura(today); document.getElementById('auraLog').textContent = state.aura[today].note || ''; if (modal) modal.classList.remove('hidden'); if (input) input.value = ''; }
+function closeAuraModal(){ const modal = document.getElementById('modalAura'); if (modal) modal.classList.add('hidden'); }
 
-/* Log aura numbers from input */
-function logAuraFromInput() {
+function logAuraFromInput(){
   const input = document.getElementById('auraInput');
   if (!input) return;
   const raw = input.value || '';
   if (!raw.trim()) return;
-  // split by commas or whitespace
-  const parts = raw.split(/[,|\s]+/).map(s => s.trim()).filter(Boolean);
+  const parts = raw.split(/[,|\s]+/).map(s=>s.trim()).filter(Boolean);
   if (!parts.length) return;
   const today = getTodayKey();
   ensureAura(today);
-  for (const p of parts) {
+  for (const p of parts){
     state.aura[today].log.push(p);
     const b = baseDigit(p);
     if (b && !state.aura[today].numbers.includes(b)) state.aura[today].numbers.push(b);
-    // pick random meaning
+    // choose tailored meaning
     const choices = ANGEL_MEANINGS[String(b)] || ['A gentle message arrives.'];
-    const msg = choices[Math.floor(Math.random() * choices.length)];
+    const msg = choices[Math.floor(Math.random()*choices.length)];
     const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
     state.aura[today].note += `[${time}] ${p}: ${msg}\n`;
   }
   saveState();
   renderOrb();
-  // update modal log and close or keep open
+  // update modal log (keep modal open to review)
   document.getElementById('auraLog').textContent = state.aura[today].note;
-  // keep modal open for review
 }
 
-/* ---------- Wiring / Event listeners ---------- */
-function wire() {
-  // GEM
-  const btnAdd = document.getElementById('btnGemAdd');
-  const btnFull = document.getElementById('btnGemFull');
-  const btnReset = document.getElementById('btnGemReset');
-  const notes = document.getElementById('gemNotes');
-  if (btnAdd) btnAdd.addEventListener('click', gemAdd);
-  if (btnFull) btnFull.addEventListener('click', gemSetFull);
-  if (btnReset) btnReset.addEventListener('click', () => {
-    if (confirm('Reset today\'s gem?')) gemResetToday();
-  });
-  if (notes) {
-    notes.addEventListener('blur', gemNotesSave);
-    notes.addEventListener('change', gemNotesSave);
-  }
+/* ---------- wiring ---------- */
+function wire(){
+  // gem
+  document.getElementById('btnGemAdd')?.addEventListener('click', gemAdd);
+  document.getElementById('btnGemFull')?.addEventListener('click', gemSetFull);
+  document.getElementById('btnGemReset')?.addEventListener('click', ()=>{ if (confirm("Reset today's gem?")) gemResetToday(); });
+  document.getElementById('gemNotes')?.addEventListener('blur', gemNotesSave);
 
-  // GARDEN
-  const btnBloom = document.getElementById('btnBloomToday');
-  if (btnBloom) btnBloom.addEventListener('click', bloomToday);
+  // garden
+  document.getElementById('btnBloomToday')?.addEventListener('click', bloomToday);
 
-  // WALL
-  const btnAddBrick = document.getElementById('btnAddBrick');
-  const btnComplete = document.getElementById('btnCompleteWall');
-  const btnResetWall = document.getElementById('btnResetWall');
-  if (btnAddBrick) btnAddBrick.addEventListener('click', addBrick);
-  if (btnComplete) btnComplete.addEventListener('click', completeWall);
-  if (btnResetWall) btnResetWall.addEventListener('click', () => {
-    if (confirm('Reset current wall (this will clear current bricks)?')) resetWall();
-  });
+  // wall
+  document.getElementById('btnAddBrick')?.addEventListener('click', addBrick);
+  document.getElementById('btnCompleteWall')?.addEventListener('click', completeWall);
+  document.getElementById('btnResetWall')?.addEventListener('click', ()=>{ if (confirm('Reset wall?')) resetWall(); });
 
-  // TAROT
-  const btnTarotOpen = document.getElementById('btnTarotOpen');
-  const btnTarotClose = document.getElementById('btnCloseTarot');
-  if (btnTarotOpen) btnTarotOpen.addEventListener('click', openTarotModal);
-  if (btnTarotClose) btnTarotClose.addEventListener('click', closeTarotModal);
+  // tarot
+  document.getElementById('btnTarotOpen')?.addEventListener('click', openTarotModal);
+  document.getElementById('btnCloseTarot')?.addEventListener('click', closeTarotModal);
 
-  // AURA
-  const orb = document.getElementById('auraOrb');
-  const btnOpenAura = document.getElementById('btnOpenAura');
-  const btnCloseAura = document.getElementById('btnCloseAura');
-  const btnLogAura = document.getElementById('btnLogAura');
-  const btnClearAuraInput = document.getElementById('btnClearAuraInput');
+  // aura
+  document.getElementById('auraOrb')?.addEventListener('click', openAuraModal);
+  document.getElementById('btnOpenAura')?.addEventListener('click', openAuraModal);
+  document.getElementById('btnCloseAura')?.addEventListener('click', closeAuraModal);
+  document.getElementById('btnLogAura')?.addEventListener('click', logAuraFromInput);
+  document.getElementById('btnClearAuraInput')?.addEventListener('click', ()=>{ const ta=document.getElementById('auraInput'); if (ta) ta.value=''; });
 
-  if (orb) orb.addEventListener('click', openAuraModal);
-  if (btnOpenAura) btnOpenAura.addEventListener('click', openAuraModal);
-  if (btnCloseAura) btnCloseAura.addEventListener('click', closeAuraModal);
-  if (btnLogAura) btnLogAura.addEventListener('click', () => {
-    logAuraFromInput();
-  });
-  if (btnClearAuraInput) btnClearAuraInput.addEventListener('click', () => {
-    const input = document.getElementById('auraInput');
-    if (input) input.value = '';
-  });
-
-  // modal close via overlay click (click outside panel)
-  document.querySelectorAll('.modal').forEach(modal => {
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) {
-        modal.classList.add('hidden');
-      }
-    });
+  // modal overlay click to close
+  document.querySelectorAll('.modal').forEach(m => {
+    m.addEventListener('click', (e) => { if (e.target === m) m.classList.add('hidden'); });
   });
 }
 
-/* ---------------------------
-   Init: ensure today's keys and render
-   --------------------------- */
-function init() {
-  // ensure today's shadow objects
+/* init */
+function init(){
   const today = getTodayKey();
-  ensureGem(today);
-  ensureGarden(today);
-  ensureAura(today);
-  ensureTarot(today);
-
-  // wire UI
+  ensureGem(today); ensureGarden(today); ensureAura(today); ensureTarot(today);
   wire();
-
-  // initial render
   updateUI();
-
-  // save initial state (in case defaults were added)
   saveState();
 }
-
-/* start */
-document.addEventListener('DOMContentLoaded', init);
-/* Regina Era Tracker - clean front-end rewrite
-   Features:
-   - Daily Gem
-   - Weekly Garden
-   - Brick Wall
-   - Daily Tarot
-   - Angel Aura Orb
-
-   Storage key: 'reginaEraTracker'
-*/
-
-const STORAGE_KEY = 'reginaEraTracker';
-const GEM_TARGET = 8;
-const NUM_BLOOMS = 7;
-const NUM_BRICKS = 12;
-
-/* ---------------------------
-   Helpers: state load/save & date
-   --------------------------- */
-function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {
-    console.error('Failed to parse state', e);
-  }
-  // default state
-  return {
-    gem: {},      // { '2025-12-10': { wins: 0, notes: '' } }
-    garden: {},   // { '2025-12-10': { bloomed: true } }
-    bricks: { currentBricks: 0, wallsCompleted: 0 },
-    aura: {},     // { '2025-12-10': { numbers: [], log: [], note: '' } }
-    tarot: {}     // { '2025-12-10': { cardId: 'the-sun' } }
-  };
-}
-function saveState() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch (e) {
-    console.error('Failed to save state', e);
-  }
-}
-function getTodayKey(date = new Date()) {
-  const d = new Date(date.getTime() - date.getTimezoneOffset()*60000);
-  return d.toISOString().slice(0,10);
-}
-
-/* in-memory state */
-let state = loadState();
-
-/* ---------------------------
-   Utility: safe ensure day objects
-   --------------------------- */
-function ensureGem(dateKey) {
-  if (!state.gem[dateKey]) state.gem[dateKey] = { wins: 0, notes: '' };
-}
-function ensureGarden(dateKey) {
-  if (!state.garden[dateKey]) state.garden[dateKey] = { bloomed: false };
-}
-function ensureAura(dateKey) {
-  if (!state.aura[dateKey]) state.aura[dateKey] = { numbers: [], log: [], note: '' };
-}
-function ensureTarot(dateKey) {
-  if (!state.tarot[dateKey]) state.tarot[dateKey] = { cardId: null };
-}
-
-/* ---------------------------
-   Tarot cards definition
-   --------------------------- */
-const TAROT_CARDS = [
-  { id: 'sun', title: 'The Sun', glyph: '☼', tagline: 'Warmth, clarity', meaning: 'A day of warmth, clarity, and small victories. Focus on what brings light.' },
-  { id: 'moon', title: 'The Moon', glyph: '◐', tagline: 'Intuition, rest', meaning: 'Trust your inner guide. Slow down and listen, dreams carry hints.' },
-  { id: 'star', title: 'The Star', glyph: '✦', tagline: 'Hope, healing', meaning: 'Gentle healing energy. Replenish yourself and share soft light.' },
-  { id: 'hermit', title: 'The Hermit', glyph: '◎', tagline: 'Focus, study', meaning: 'A small retreat fuels insight. Take a quiet hour for deep work.' },
-  { id: 'empress', title: 'The Empress', glyph: '♁', tagline: 'Nurture, steadiness', meaning: 'Tend to your environment and body. Comfort creates momentum.' },
-  { id: 'magus', title: 'The Magus', glyph: '✶', tagline: 'Craft, speak', meaning: 'Your words and craft have effect. Try a clear small action.' },
-  { id: 'temperance', title: 'Temperance', glyph: '△', tagline: 'Balance', meaning: 'Small balance shifts accumulate. Mix routine with small joys.' },
-  { id: 'strength', title: 'Strength', glyph: '♯', tagline: 'Gentle power', meaning: 'Soft discipline wins. Show up and honor limits kindly.' }
-];
-
-/* deterministic index for date */
-function tarotIndexForKey(key) {
-  // simple deterministic hash: sum of char codes
-  let sum = 0;
-  for (let i=0;i<key.length;i++) sum += key.charCodeAt(i);
-  return sum % TAROT_CARDS.length;
-}
-
-/* ---------------------------
-   ANGEL MEANINGS
-   --------------------------- */
-const ANGEL_MEANINGS = {
-  '2': [
-    'Support is near — small steady steps matter.',
-    'A reminder to breathe and accept help.',
-    'Balance and gentle structure are supporting you.'
-  ],
-  '3': [
-    'Creative energy spark — try a tiny experiment.',
-    'Play opens new doors; curiosity leads.',
-    'Communication blossoms; say one kind truth.'
-  ],
-  '4': [
-    'Grounding energy — build one reliable habit.',
-    'Practical care brings comfort later.',
-    'Tend the foundation: rest, food, shelter, rhythm.'
-  ],
-  '5': [
-    'Change approaches — stay curious and adaptive.',
-    'A small pivot opens surprising options.',
-    'Movement and exploration are favored this day.'
-  ]
-};
-
-/* ---------------------------
-   Rendering functions
-   --------------------------- */
-function updateUI() {
-  renderGem();
-  renderGarden();
-  renderWall();
-  renderTarot();
-  renderOrb();
-}
-
-/* ---------- GEM ---------- */
-function renderGem(dateKey = getTodayKey()) {
-  ensureGem(dateKey);
-  const elCount = document.getElementById('gemCount');
-  const elFill = document.getElementById('gemFill');
-  const elDiamond = document.getElementById('gemDiamond');
-  const notes = document.getElementById('gemNotes');
-
-  const wins = state.gem[dateKey].wins || 0;
-  if (elCount) elCount.textContent = `${wins} / ${GEM_TARGET}`;
-  if (notes) notes.value = state.gem[dateKey].notes || '';
-
-  // compute fill percent relative to target and set height
-  const pct = Math.max(0, Math.min(100, Math.round((wins / GEM_TARGET) * 100)));
-  if (elFill) elFill.style.height = pct + '%';
-
-  // classes for shimmer / full
-  if (elDiamond) {
-    elDiamond.classList.toggle('shimmer', wins > 0 && wins < GEM_TARGET);
-    elDiamond.classList.toggle('full', wins >= GEM_TARGET);
-  }
-}
-
-function gemAdd() {
-  const key = getTodayKey();
-  ensureGem(key);
-  state.gem[key].wins = Math.min(GEM_TARGET, (state.gem[key].wins || 0) + 1);
-  saveState(); updateUI();
-}
-function gemSetFull(){
-  const key = getTodayKey();
-  ensureGem(key);
-  state.gem[key].wins = GEM_TARGET;
-  saveState(); updateUI();
-}
-function gemResetToday(){
-  const key = getTodayKey();
-  ensureGem(key);
-  state.gem[key].wins = 0;
-  state.gem[key].notes = '';
-  saveState(); updateUI();
-}
-
-/* save gem notes on blur */
-function gemNotesSave() {
-  const key = getTodayKey();
-  ensureGem(key);
-  const notes = document.getElementById('gemNotes');
-  if (!notes) return;
-  state.gem[key].notes = notes.value;
-  saveState();
-}
-
-/* ---------- GARDEN ---------- */
-function renderGarden() {
-  const row = document.getElementById('gardenRow');
-  if (!row) return;
-  row.innerHTML = '';
-  // render last 7 days ending with today
-  for (let i = NUM_BLOOMS - 1; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    const key = getTodayKey(d);
-    ensureGarden(key);
-    const plot = document.createElement('div');
-    plot.className = 'plot';
-    plot.dataset.date = key;
-    plot.textContent = new Date(key).toLocaleDateString(undefined, {weekday: 'short'});
-    if (state.garden[key].bloomed) {
-      plot.classList.add('bloomed');
-    }
-    plot.addEventListener('click', () => {
-      toggleBloom(key, plot);
-    });
-    row.appendChild(plot);
-  }
-}
-
-function toggleBloom(key, el) {
-  ensureGarden(key);
-  state.garden[key].bloomed = !state.garden[key].bloomed;
-  saveState();
-  if (state.garden[key].bloomed && el) {
-    el.classList.remove('animate');
-    void el.offsetWidth;
-    el.classList.add('animate'); // triggers pop animation
-    el.classList.add('bloomed');
-  } else if (el) {
-    el.classList.remove('bloomed');
-  }
-  updateUI();
-}
-function bloomToday() {
-  const key = getTodayKey();
-  ensureGarden(key);
-  state.garden[key].bloomed = true;
-  saveState(); updateUI();
-}
-
-/* ---------- WALL ---------- */
-function renderWall() {
-  const container = document.getElementById('wallGrid');
-  const label = document.getElementById('wallLabel');
-  const completed = document.getElementById('wallsCompleted');
-  if (!container) return;
-  container.innerHTML = '';
-  const count = state.bricks.currentBricks || 0;
-  for (let i = 0; i < NUM_BRICKS; i++) {
-    const b = document.createElement('div');
-    b.className = 'brick' + (i < count ? ' filled' : '');
-    b.textContent = (i < count) ? '' : '';
-    container.appendChild(b);
-  }
-  if (label) label.textContent = `${count} / ${NUM_BRICKS}`;
-  if (completed) completed.textContent = `Walls completed: ${state.bricks.wallsCompleted || 0}`;
-}
-
-function addBrick() {
-  state.bricks.currentBricks = Math.min(NUM_BRICKS, (state.bricks.currentBricks || 0) + 1);
-  saveState(); updateUI();
-}
-function completeWall() {
-  if ((state.bricks.currentBricks || 0) >= NUM_BRICKS) {
-    state.bricks.wallsCompleted = (state.bricks.wallsCompleted || 0) + 1;
-    state.bricks.currentBricks = 0;
-    saveState(); updateUI();
-  } else {
-    // if not full, do nothing (or we could prompt)
-    // For clarity, we simply set to full and complete
-    // but keep to spec: require 12 to complete
-    alert('You must have 12 bricks to complete the wall.');
-  }
-}
-function resetWall() {
-  state.bricks.currentBricks = 0;
-  saveState(); updateUI();
-}
-
-/* ---------- TAROT ---------- */
-function renderTarot(dateKey = getTodayKey()) {
-  ensureTarot(dateKey);
-  const cardField = document.getElementById('tarotCard');
-  const title = document.getElementById('tarotTitle');
-  const tagline = document.getElementById('tarotTagline');
-  const glyph = document.getElementById('tarotGlyph');
-
-  // choose deterministic card and persist for the day
-  if (!state.tarot[dateKey].cardId) {
-    const idx = tarotIndexForKey(dateKey);
-    state.tarot[dateKey].cardId = TAROT_CARDS[idx].id;
-    saveState();
-  }
-  const card = TAROT_CARDS.find(c => c.id === state.tarot[dateKey].cardId) || TAROT_CARDS[0];
-  if (title) title.textContent = card.title;
-  if (tagline) tagline.textContent = card.tagline;
-  if (glyph) glyph.textContent = card.glyph;
-}
-
-/* tarot modal */
-function openTarotModal() {
-  const key = getTodayKey();
-  ensureTarot(key);
-  const card = TAROT_CARDS.find(c => c.id === state.tarot[key].cardId) || TAROT_CARDS[0];
-  document.getElementById('modalTarotTitle').textContent = card.title;
-  document.getElementById('modalTarotGlyph').textContent = card.glyph;
-  document.getElementById('modalTarotMeaning').textContent = card.meaning;
-  document.getElementById('modalTarot').classList.remove('hidden');
-}
-function closeTarotModal() {
-  document.getElementById('modalTarot').classList.add('hidden');
-}
-
-/* ---------- ORB / AURA ---------- */
-function renderOrb() {
-  const orb = document.getElementById('auraOrb');
-  const summary = document.getElementById('auraSummary');
-  const today = getTodayKey();
-  ensureAura(today);
-  const btn = document.getElementById('btnOpenAura');
-
-  // compute unique numbers and dominant
-  const numbers = state.aura[today].numbers || [];
-  const log = state.aura[today].log || [];
-  const note = state.aura[today].note || '';
-  if (summary) {
-    if (numbers.length === 0) summary.textContent = 'No aura numbers logged today';
-    else summary.textContent = `Today: ${numbers.join(', ')}`;
-  }
-
-  // apply color classes or gradient depending on numbers
-  if (orb) {
-    orb.classList.remove('papaya','berry','vervain','dusty','pulse');
-    if (numbers.length === 0) {
-      // neutral default
-      orb.style.background = 'radial-gradient(circle at 30% 30%, rgba(189,104,9,0.95), rgba(154,63,74,0.9))';
-    } else {
-      // map base digits to colors and blend if multiple
-      const colorMap = { '2': 'var(--papaya)', '3': 'var(--berry)', '4': 'var(--vervain)', '5': 'var(--dusty-blue)' };
-      if (numbers.length === 1) {
-        const cls = numbers[0] === 2 ? 'papaya' : numbers[0] === 3 ? 'berry' : numbers[0] === 4 ? 'vervain' : 'dusty';
-        orb.classList.add(cls);
-        orb.classList.add('pulse');
-      } else {
-        // create a small gradient blend
-        const stops = numbers.map((n,i) => `${colorMap[String(n)]} ${Math.round((i/(numbers.length))*100)}%`);
-        orb.style.background = `linear-gradient(135deg, ${stops.join(',')})`;
-        orb.classList.add('pulse');
-      }
-    }
-  }
-
-  // update modal log if open
-  const logEl = document.getElementById('auraLog');
-  if (logEl) logEl.textContent = note || '';
-}
-
-/* parse a number string to its base digit (2-5) for repeating-digit forms */
-function baseDigit(s) {
-  if (s === null || s === undefined) return null;
-  const str = String(s).trim();
-  if (!str) return null;
-  // if all characters same (e.g., 222, 333)
-  if (str.split('').every(ch => ch === str[0])) {
-    const n = parseInt(str[0], 10);
-    if (n >= 2 && n <= 5) return n;
-  }
-  // fallback: find first digit 2-5
-  const m = str.match(/[2-5]/);
-  return m ? parseInt(m[0],10) : null;
-}
-
-/* open/close aura modal */
-function openAuraModal() {
-  const modal = document.getElementById('modalAura');
-  const input = document.getElementById('auraInput');
-  const today = getTodayKey();
-  ensureAura(today);
-  // populate log
-  document.getElementById('auraLog').textContent = state.aura[today].note || '';
-  if (modal) modal.classList.remove('hidden');
-  if (input) input.value = '';
-}
-function closeAuraModal() {
-  const modal = document.getElementById('modalAura');
-  if (modal) modal.classList.add('hidden');
-}
-
-/* Log aura numbers from input */
-function logAuraFromInput() {
-  const input = document.getElementById('auraInput');
-  if (!input) return;
-  const raw = input.value || '';
-  if (!raw.trim()) return;
-  // split by commas or whitespace
-  const parts = raw.split(/[,|\s]+/).map(s => s.trim()).filter(Boolean);
-  if (!parts.length) return;
-  const today = getTodayKey();
-  ensureAura(today);
-  for (const p of parts) {
-    state.aura[today].log.push(p);
-    const b = baseDigit(p);
-    if (b && !state.aura[today].numbers.includes(b)) state.aura[today].numbers.push(b);
-    // pick random meaning
-    const choices = ANGEL_MEANINGS[String(b)] || ['A gentle message arrives.'];
-    const msg = choices[Math.floor(Math.random() * choices.length)];
-    const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-    state.aura[today].note += `[${time}] ${p}: ${msg}\n`;
-  }
-  saveState();
-  renderOrb();
-  // update modal log and close or keep open
-  document.getElementById('auraLog').textContent = state.aura[today].note;
-  // keep modal open for review
-}
-
-/* ---------- Wiring / Event listeners ---------- */
-function wire() {
-  // GEM
-  const btnAdd = document.getElementById('btnGemAdd');
-  const btnFull = document.getElementById('btnGemFull');
-  const btnReset = document.getElementById('btnGemReset');
-  const notes = document.getElementById('gemNotes');
-  if (btnAdd) btnAdd.addEventListener('click', gemAdd);
-  if (btnFull) btnFull.addEventListener('click', gemSetFull);
-  if (btnReset) btnReset.addEventListener('click', () => {
-    if (confirm('Reset today\'s gem?')) gemResetToday();
-  });
-  if (notes) {
-    notes.addEventListener('blur', gemNotesSave);
-    notes.addEventListener('change', gemNotesSave);
-  }
-
-  // GARDEN
-  const btnBloom = document.getElementById('btnBloomToday');
-  if (btnBloom) btnBloom.addEventListener('click', bloomToday);
-
-  // WALL
-  const btnAddBrick = document.getElementById('btnAddBrick');
-  const btnComplete = document.getElementById('btnCompleteWall');
-  const btnResetWall = document.getElementById('btnResetWall');
-  if (btnAddBrick) btnAddBrick.addEventListener('click', addBrick);
-  if (btnComplete) btnComplete.addEventListener('click', completeWall);
-  if (btnResetWall) btnResetWall.addEventListener('click', () => {
-    if (confirm('Reset current wall (this will clear current bricks)?')) resetWall();
-  });
-
-  // TAROT
-  const btnTarotOpen = document.getElementById('btnTarotOpen');
-  const btnTarotClose = document.getElementById('btnCloseTarot');
-  if (btnTarotOpen) btnTarotOpen.addEventListener('click', openTarotModal);
-  if (btnTarotClose) btnTarotClose.addEventListener('click', closeTarotModal);
-
-  // AURA
-  const orb = document.getElementById('auraOrb');
-  const btnOpenAura = document.getElementById('btnOpenAura');
-  const btnCloseAura = document.getElementById('btnCloseAura');
-  const btnLogAura = document.getElementById('btnLogAura');
-  const btnClearAuraInput = document.getElementById('btnClearAuraInput');
-
-  if (orb) orb.addEventListener('click', openAuraModal);
-  if (btnOpenAura) btnOpenAura.addEventListener('click', openAuraModal);
-  if (btnCloseAura) btnCloseAura.addEventListener('click', closeAuraModal);
-  if (btnLogAura) btnLogAura.addEventListener('click', () => {
-    logAuraFromInput();
-  });
-  if (btnClearAuraInput) btnClearAuraInput.addEventListener('click', () => {
-    const input = document.getElementById('auraInput');
-    if (input) input.value = '';
-  });
-
-  // modal close via overlay click (click outside panel)
-  document.querySelectorAll('.modal').forEach(modal => {
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) {
-        modal.classList.add('hidden');
-      }
-    });
-  });
-}
-
-/* ---------------------------
-   Init: ensure today's keys and render
-   --------------------------- */
-function init() {
-  // ensure today's shadow objects
-  const today = getTodayKey();
-  ensureGem(today);
-  ensureGarden(today);
-  ensureAura(today);
-  ensureTarot(today);
-
-  // wire UI
-  wire();
-
-  // initial render
-  updateUI();
-
-  // save initial state (in case defaults were added)
-  saveState();
-}
-
-/* start */
 document.addEventListener('DOMContentLoaded', init);
