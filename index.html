@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Regina Era Tracker · Full V3</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <div class="top-row">
+      <div class="top-left">
+        <h1>Regina Era Tracker</h1>
+        <div class="sub">Tarot • Aura Orb • Shrine • Gem • Garden • Brick Wall</div>
+      </div>
+      <div class="top-right">
+        <div class="top-right-row">
+          <div class="aura-orb-wrapper">
+            <div id="auraOrb" class="aura-orb level-0 theme-neutral" title="Angel Aura Orb">
+              <div class="aura-orb-core"></div>
+            </div>
+          </div>
+          <button type="button" id="btnShrineOpen" class="secondary small shrine-link">Shrine 🕯️</button>
+        </div>
+        <div class="date-label" id="todayLabel"></div>
+      </div>
+    </div>
+
+    <!-- Daily Tarot Card -->
+    <div class="cards cards-single">
+      <div class="card card-daily">
+        <div class="card-header">
+          <h2>Today’s Energy Card 🔮</h2>
+          <span class="pill pill-soft">Sag ☉ · Gem ↑ · Tau ☾</span>
+        </div>
+        <p>One card for the day, blending your natal chart with your soft-discipline era.</p>
+
+        <div class="tarot-shell">
+          <div class="tarot-card" id="tarotCard">
+            <div class="tarot-face tarot-static" id="tarotFace">
+              <div class="tarot-art" id="tarotArtGlyph">✶</div>
+              <div class="tarot-title-small" id="tarotTitleShort">Energy of the day</div>
+              <div class="tarot-tagline-small" id="tarotTaglineShort"></div>
+            </div>
+          </div>
+          <button type="button" id="btnCardExpand" class="secondary small tarot-expand">Open card</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main trackers -->
+    <div class="cards">
+      <!-- Gem -->
+      <div class="card card-gem">
+        <div class="card-header">
+          <h2>Daily Gem Charge 💎</h2>
+          <span class="pill">Today</span>
+        </div>
+        <p>Every little win charges your gem. Hit 100% daily; log as many wins as you like.</p>
+
+        <div class="quick-actions">
+          <button type="button" data-action="battle">Daily Battle</button>
+          <button type="button" data-action="integrity">Micro-Integrity</button>
+          <button type="button" data-action="future">Future Self</button>
+        </div>
+
+        <div class="tracker-row" id="gemRow"></div>
+        <div class="gem-visual-wrapper">
+          <div class="gem-visual-outline">
+            <div class="gem-visual-fill" id="gemVisualFill"></div>
+          </div>
+          <div class="progress-bar big"><div class="progress-fill gem-fill" id="gemFill"></div></div>
+        </div>
+        <div class="progress-text" id="gemText"></div>
+
+        <textarea id="gemNotes" class="notes" rows="3" placeholder="Jot today’s wins: What was your battle? Your promise? Your glow-up choice?"></textarea>
+
+        <div class="btn-row">
+          <button type="button" id="btnGemFull">Mark gem 100%</button>
+          <button type="button" class="secondary" id="btnGemReset">Reset today</button>
+        </div>
+      </div>
+
+      <!-- Garden -->
+      <div class="card card-garden">
+        <div class="card-header">
+          <h2>Weekly Garden 🌿</h2>
+          <span class="pill pill-soft">This week</span>
+        </div>
+        <p>Each day you show up softly, a new bloom opens. Tap today’s bud to bloom it.</p>
+
+        <div class="garden-shell">
+          <div class="tracker-row" id="gardenRow"></div>
+          <div class="garden-plot" id="gardenPlot"></div>
+          <div class="progress-bar big"><div class="progress-fill" id="gardenFill"></div></div>
+          <div class="progress-text" id="gardenText"></div>
+          <div id="gardenResetOverlay" class="garden-reset-overlay">
+            <div class="garden-reset-inner">
+              <div class="reset-emoji">🍃</div>
+              <div class="reset-text">New week, fresh soil.</div>
+            </div>
+          </div>
+        </div>
+
+        <textarea id="gardenNotes" class="notes" rows="2" placeholder="Main character moments, soft resets, presence wins…"></textarea>
+
+        <div class="btn-row">
+          <button type="button" id="btnBloomToday">Bloom today</button>
+          <button type="button" class="secondary" id="btnNewWeek">New week</button>
+        </div>
+      </div>
+
+      <!-- Brick Wall -->
+      <div class="card card-brick">
+        <div class="card-header">
+          <h2>Foundation Brick Wall 🧱</h2>
+          <span class="pill pill-deep">Cycle</span>
+        </div>
+        <p>Hard tasks, emails, appointments, money moves — each one adds a brick.</p>
+
+        <div class="tracker-row" id="brickRow"></div>
+        <div class="progress-bar"><div class="progress-fill" id="brickFill"></div></div>
+        <div class="progress-text" id="brickText"></div>
+
+        <textarea id="brickNotes" class="notes" rows="3" placeholder="List the bricks you’ve placed: tasks, calls, decisions, tiny grown-woman moves."></textarea>
+
+        <div class="btn-row">
+          <button type="button" id="btnBrickAdd">Add one brick</button>
+          <button type="button" id="btnWallComplete">Mark wall complete</button>
+          <button type="button" class="secondary" id="btnWallReset">Reset wall</button>
+        </div>
+        <div class="badges" id="brickBadges"></div>
+      </div>
+    </div>
+
+    <!-- Stats + summary -->
+    <div class="cards cards-wide">
+      <div class="card card-stats">
+        <div class="card-header">
+          <h2>Era Stats 📊</h2>
+        </div>
+        <div id="chapterTitle" class="chapter-title"></div>
+        <div class="stat-visuals">
+          <div class="stat-visual">
+            <div class="stat-visual-title">Weekly Gem Glow</div>
+            <div class="weekly-gem-wrapper">
+              <div class="weekly-gem-outline">
+                <div class="weekly-gem-fill" id="weeklyGemFill"></div>
+              </div>
+              <div class="progress-text small" id="statGemText"></div>
+            </div>
+          </div>
+          <div class="stat-visual">
+            <div class="stat-visual-title">Weekly Garden</div>
+            <div class="weekly-garden-wrapper">
+              <div class="weekly-garden-bed" id="weeklyGardenBed"></div>
+              <div class="progress-text small" id="statGardenText"></div>
+            </div>
+          </div>
+        </div>
+        <div class="stats" id="stats"></div>
+      </div>
+
+      <div class="card card-export">
+        <div class="card-header">
+          <h2>Send to GPT ✨</h2>
+        </div>
+        <p>Tap to generate a summary you can paste into your Regina Era Tracker GPT.</p>
+        <div class="btn-row">
+          <button type="button" id="btnGenerateSummary">Generate summary</button>
+          <button type="button" class="secondary" id="btnCopySummary">Copy</button>
+        </div>
+        <textarea id="summaryOutput" class="notes" rows="7" placeholder="Your summary for GPT will appear here."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tarot modal -->
+  <div id="cardModal" class="modal-backdrop">
+    <div class="modal-card wide">
+      <div class="modal-header">
+        <h3>Today’s Energy Card ✨</h3>
+        <button type="button" class="icon-btn" id="btnCardClose" aria-label="Close">✕</button>
+      </div>
+      <div id="cardModalContent" class="card-modal-content"></div>
+    </div>
+  </div>
+
+  <!-- Aura Orb modal -->
+  <div id="orbModal" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Angel Aura Orb ✨</h3>
+        <button type="button" class="icon-btn" id="btnOrbClose" aria-label="Close">✕</button>
+      </div>
+      <p class="modal-sub">
+        Log angel numbers as you see them. Each entry adds fresh colors and a new message.
+      </p>
+
+      <div id="orbSeenToday" class="chip-row"></div>
+
+      <label class="modal-label">Add angel numbers</label>
+      <input id="orbInput" class="modal-input" placeholder="e.g. 222 or 222, 333, 444" />
+
+      <button type="button" id="btnOrbGenerate" class="modal-btn">Generate reflection</button>
+
+      <label class="modal-label">Today’s aura journal</label>
+      <textarea id="orbNote" class="modal-textarea" rows="4" placeholder="Each time you add numbers, a new reflection line appears here."></textarea>
+
+      <div class="modal-footer">
+        <button type="button" id="btnOrbSave" class="secondary small">Save & close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shrine modal -->
+  <div id="shrineModal" class="modal-backdrop">
+    <div class="modal-card shrine-card">
+      <div class="modal-header">
+        <h3>Self-Care Shrine 🕯️</h3>
+        <button type="button" class="icon-btn" id="btnShrineClose" aria-label="Close">✕</button>
+      </div>
+      <p class="modal-sub">
+        Each day you fully charge your gem for the first time, you unlock a new shrine item. Tap items to place/remove them on your altar.
+      </p>
+
+      <div class="shrine-altar">
+        <div class="shrine-altar-label">Today’s altar</div>
+        <div id="shrineAltarEmojis" class="shrine-altar-emojis"></div>
+      </div>
+
+      <div class="shrine-items">
+        <div class="shrine-items-label">Unlocked items</div>
+        <div id="shrineItemsGrid" class="shrine-grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
