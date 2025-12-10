@@ -804,7 +804,6 @@ button:active {
 
 .weekly-garden-day span:first-child {
   display: inline-block;
-  animation: bloomPop 0.45s ease-out;
 }
 
 .weekly-garden-day span:first-child.bloomed {
