@@ -1253,3 +1253,432 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   });
 });
+/* ADDITION: Event wiring and interactive functions appended to the end of script.js
+   - renderGem, add/mark/reset gem
+   - renderGarden and bloom toggles
+   - renderWall and brick controls
+   - deterministic tarot rendering + modal
+   - orb modal + parsing/generation helpers
+   - computeAuraDominantClass and applyAuraToDom
+*/
+
+/* Angel meanings used for orb journal lines (kept small) */
+const ANGEL_MEANINGS = {
+  2: [
+    "Support is here; let your roots deepen.",
+    "Balance your soft yes with a gentle no.",
+    "Trust small, consistent steps."
+  ],
+  3: [
+    "Creative spark — open to small experiments.",
+    "Speak your truth kindly; ideas will follow.",
+    "Play and curiosity will lead you forward."
+  ],
+  4: [
+    "Grounding energy — tend your foundations.",
+    "Practical care now pays off in calm later.",
+    "Slow, steady work builds lasting comfort."
+  ],
+  5: [
+    "Change is active; lean into curiosity.",
+    "A shift invites new options — try one small pivot.",
+    "Movement and adaptability will serve you."
+  ]
+};
+
+/* Helper: base digit from repeating-digit strings or numeric strings */
+function baseDigitFromString(val) {
+  if (val === null || val === undefined) return null;
+  const s = String(val).trim();
+  if (!s) return null;
+  const first = s[0];
+  if (s.split('').every(ch => ch === first)) {
+    const n = parseInt(first, 10);
+    return (n >= 2 && n <= 5) ? n : null;
+  }
+  const m = s.match(/[2-5]/);
+  return m ? parseInt(m[0], 10) : null;
+}
+
+/* compute dominant class from auraLogRaw */
+function computeAuraDominantClassForDay(dayObj) {
+  if (!dayObj || !Array.isArray(dayObj.auraLogRaw) || dayObj.auraLogRaw.length === 0) return 'theme-neutral';
+  const counts = {2:0,3:0,4:0,5:0};
+  for (const raw of dayObj.auraLogRaw) {
+    const d = baseDigitFromString(raw);
+    if (d >=2 && d <=5) counts[d]++;
+  }
+  let max = 0, top = null;
+  for (const k of [2,3,4,5]) {
+    if (counts[k] > max) { max = counts[k]; top = k; }
+  }
+  if (!top) return 'theme-neutral';
+  return top === 2 ? 'theme-papaya'
+       : top === 3 ? 'theme-fig'
+       : top === 4 ? 'theme-vervain'
+       : top === 5 ? 'theme-dusty'
+       : 'theme-neutral';
+}
+
+/* apply aura theme and tooltip to orb based on today's data */
+function applyAuraToDomForKey(key) {
+  ensureDay(key);
+  const day = data.days[key];
+  const orb = document.getElementById('auraOrb');
+  if (!orb) return;
+  // remove known theme classes
+  orb.classList.remove('theme-papaya','theme-fig','theme-vervain','theme-dusty','theme-neutral');
+  const cls = computeAuraDominantClassForDay(day);
+  orb.classList.add(cls);
+  // set tooltip and small transform for presence
+  const rawList = Array.isArray(day.auraLogRaw) ? day.auraLogRaw.join(', ') : '';
+  orb.title = `Angel Aura Orb — ${rawList}`;
+  orb.style.transform = (rawList && rawList.length) ? 'scale(1.03)' : '';
+}
+
+/* -------------------- GEM -------------------- */
+function renderGem(key) {
+  const k = key || todayKey();
+  ensureDay(k);
+  const day = data.days[k];
+  const fillEl = document.getElementById('gemFill');
+  const visualFill = document.getElementById('gemVisualFill');
+  const countLabel = document.getElementById('gemCountLabel');
+  const facets = Math.max(0, day.gemFacets || 0);
+  const percent = Math.min(100, Math.round((facets / DAILY_GEM_TARGET) * 100));
+  if (fillEl) fillEl.style.width = percent + '%';
+  if (visualFill) {
+    visualFill.classList.remove('gem-shimmer', 'gem-full');
+    if (facets > 0) visualFill.classList.add('gem-shimmer');
+    if (facets >= DAILY_GEM_TARGET) visualFill.classList.add('gem-full');
+  }
+  if (countLabel) countLabel.textContent = `${facets} / ${DAILY_GEM_TARGET} wins`;
+  // persist minor normalization
+  if (typeof day.gemFacets !== 'number') day.gemFacets = facets;
+  saveData();
+}
+
+/* Actions */
+function addGemAction() {
+  const k = todayKey();
+  ensureDay(k);
+  data.days[k].gemFacets = (data.days[k].gemFacets || 0) + 1;
+  // cap to reasonable value but allow overshooting
+  saveData();
+  // mark completion if >= target and not previously completed
+  if (data.days[k].gemFacets >= DAILY_GEM_TARGET && !data.days[k].gemCompleted) {
+    data.days[k].gemCompleted = true;
+    data.shrine = data.shrine || { level: 0, placed: [] };
+    data.shrine.level = Math.min((data.shrine.level || 0) + 1, SHRINE_ITEMS.length);
+    saveData();
+  }
+  renderGem(k);
+}
+
+function markGemFullAction() {
+  const k = todayKey();
+  ensureDay(k);
+  data.days[k].gemFacets = DAILY_GEM_TARGET;
+  if (!data.days[k].gemCompleted) {
+    data.days[k].gemCompleted = true;
+    data.shrine = data.shrine || { level: 0, placed: [] };
+    data.shrine.level = Math.min((data.shrine.level || 0) + 1, SHRINE_ITEMS.length);
+  }
+  saveData();
+  renderGem(k);
+}
+
+function resetTodayGemAction() {
+  const k = todayKey();
+  ensureDay(k);
+  data.days[k].gemFacets = 0;
+  data.days[k].gemCompleted = false;
+  saveData();
+  renderGem(k);
+}
+
+/* -------------------- GARDEN -------------------- */
+function renderGarden() {
+  const bed = document.getElementById('gardenBed');
+  if (!bed) return;
+  bed.innerHTML = '';
+  // build last 7 days including today
+  const out = [];
+  for (let i = NUM_BLOOMS - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0,10);
+    ensureDay(key);
+    const day = data.days[key];
+    const tile = document.createElement('div');
+    tile.className = 'bloom-tile';
+    if (key === todayKey()) tile.classList.add('today');
+    if (day.bloom) tile.classList.add('bloomed');
+    // small label for day name
+    const label = d.toLocaleDateString(undefined, {weekday:'short'});
+    tile.textContent = label;
+    tile.dataset.date = key;
+    tile.addEventListener('click', function () {
+      toggleBloomForDay(key, tile);
+    });
+    bed.appendChild(tile);
+    out.push(tile);
+  }
+}
+
+function toggleBloomForDay(key, tileEl) {
+  ensureDay(key);
+  const day = data.days[key];
+  day.bloom = !day.bloom;
+  saveData();
+  if (day.bloom) {
+    // animate
+    tileEl.classList.remove('bloomed');
+    // force reflow then add
+    void tileEl.offsetWidth;
+    tileEl.classList.add('bloomed');
+  } else {
+    tileEl.classList.remove('bloomed');
+  }
+  // reflect any dom-specific changes
+  applyAuraToDomForKey(todayKey());
+}
+
+/* Bloom today helper */
+function bloomTodayAction() {
+  const k = todayKey();
+  ensureDay(k);
+  data.days[k].bloom = true;
+  saveData();
+  renderGarden();
+}
+
+/* -------------------- BRICK WALL -------------------- */
+function renderWall() {
+  const container = document.getElementById('wallContainer');
+  const meta = document.getElementById('wallMeta');
+  if (!container) return;
+  container.innerHTML = '';
+  data.wall = data.wall || { bricksInCurrent:0, wallsCompleted:0 };
+  const count = data.wall.bricksInCurrent || 0;
+  for (let i = 0; i < NUM_BRICKS; i++) {
+    const b = document.createElement('div');
+    b.className = 'brick' + (i < count ? ' filled' : '');
+    b.textContent = i < count ? '\u25A0' : '';
+    container.appendChild(b);
+  }
+  if (meta) meta.textContent = `Walls: ${data.wall.wallsCompleted || 0} • Bricks: ${count}`;
+}
+
+function addBrickAction() {
+  data.wall = data.wall || { bricksInCurrent:0, wallsCompleted:0 };
+  data.wall.bricksInCurrent = (data.wall.bricksInCurrent || 0) + 1;
+  if (data.wall.bricksInCurrent >= NUM_BRICKS) {
+    data.wall.wallsCompleted = (data.wall.wallsCompleted || 0) + 1;
+    data.wall.bricksInCurrent = 0;
+  }
+  saveData();
+  renderWall();
+}
+
+function resetWallAction() {
+  data.wall = data.wall || { bricksInCurrent:0, wallsCompleted:0 };
+  data.wall.bricksInCurrent = 0;
+  saveData();
+  renderWall();
+}
+
+/* -------------------- TAROT -------------------- */
+
+/* deterministic choice for today's tarot: use date as simple seed */
+function tarotIndexForDateKey(key) {
+  const d = new Date(key + 'T00:00:00');
+  const idx = (d.getFullYear() * 10000 + (d.getMonth()+1) * 100 + d.getDate());
+  return idx % TAROT_CARDS.length;
+}
+
+function renderTarot() {
+  const key = todayKey();
+  ensureDay(key);
+  const day = data.days[key];
+  if (!day.tarotId) {
+    const idx = tarotIndexForDateKey(key);
+    day.tarotId = TAROT_CARDS[idx] && TAROT_CARDS[idx].id ? TAROT_CARDS[idx].id : idx;
+    saveData();
+  }
+  const cardObj = TAROT_CARDS.find(c => c.id === day.tarotId) || TAROT_CARDS[tarotIndexForDateKey(key)];
+  if (!cardObj) return;
+  const shortTitle = document.getElementById('tarotTitleShort');
+  const glyph = document.getElementById('tarotArtGlyph');
+  const tagline = document.getElementById('tarotTaglineShort');
+  if (shortTitle) shortTitle.textContent = cardObj.title || cardObj.name || 'Daily Card';
+  if (glyph) glyph.textContent = cardObj.glyph || cardObj.symbol || '✶';
+  if (tagline) tagline.textContent = cardObj.tagline || cardObj.short || '';
+  // ensure expand button opens modal
+  const expand = document.getElementById('btnCardExpand');
+  if (expand) {
+    expand.removeEventListener('click', openTarotModal);
+    expand.addEventListener('click', openTarotModal);
+  }
+}
+
+function openTarotModal() {
+  const key = todayKey();
+  ensureDay(key);
+  const day = data.days[key];
+  const cardObj = TAROT_CARDS.find(c => c.id === day.tarotId) || TAROT_CARDS[tarotIndexForDateKey(key)];
+  if (!cardObj) return;
+  document.getElementById('tarotModalTitle').textContent = cardObj.title || cardObj.name || 'Card';
+  document.getElementById('tarotModalGlyph').textContent = cardObj.glyph || cardObj.symbol || '✶';
+  document.getElementById('tarotModalMeaning').textContent = cardObj.meaning || cardObj.description || '';
+  const modal = document.getElementById('tarotModal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeTarotModal() {
+  const modal = document.getElementById('tarotModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+/* -------------------- ORB / AURA -------------------- */
+
+/* open orb modal and populate today's journal */
+function openOrbModal() {
+  const modal = document.getElementById('orbModal');
+  if (!modal) return;
+  const journal = document.getElementById('orbJournal');
+  ensureDay(todayKey());
+  const d = data.days[todayKey()];
+  if (journal) journal.textContent = d.auraNote || '';
+  modal.classList.remove('hidden');
+  const ta = document.getElementById('orbInput');
+  if (ta) ta.value = '';
+}
+
+/* close orb modal */
+function closeOrbModal() {
+  const modal = document.getElementById('orbModal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+}
+
+/* parse input and generate one line per number, update auraLogRaw / auraNumbers / auraNote */
+function generateAuraReflection() {
+  const ta = document.getElementById('orbInput');
+  if (!ta) return;
+  const raw = ta.value || '';
+  if (!raw.trim()) return;
+  // split on comma or whitespace
+  const parts = raw.split(/[,|\s]+/).map(s => s.trim()).filter(Boolean);
+  if (!parts.length) return;
+  ensureDay(todayKey());
+  const day = data.days[todayKey()];
+  day.auraLogRaw = day.auraLogRaw || [];
+  day.auraNumbers = day.auraNumbers || [];
+  for (const p of parts) {
+    day.auraLogRaw.push(p);
+    const base = baseDigitFromString(p);
+    if (base && !day.auraNumbers.includes(base)) day.auraNumbers.push(base);
+    // pick random meaning
+    const choices = ANGEL_MEANINGS[base] || ["A gentle message arrives."];
+    const msg = choices[Math.floor(Math.random() * choices.length)];
+    const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    day.auraNote = (day.auraNote || '') + `[${time}] ${p}: ${msg}\n`;
+  }
+  saveData();
+  applyAuraToDomForKey(todayKey());
+  // update journal UI
+  const journal = document.getElementById('orbJournal');
+  if (journal) journal.textContent = day.auraNote || '';
+  // close modal after update (or keep open if you prefer)
+  closeOrbModal();
+}
+
+/* -------------------- BOOTSTRAP: wire listeners on DOM ready -------------------- */
+document.addEventListener('DOMContentLoaded', function () {
+  // Ensure today's day exists
+  ensureDay(todayKey());
+
+  // wire gem controls
+  const btnAddGem = document.getElementById('btnAddGem');
+  const btnMarkGemFull = document.getElementById('btnMarkGemFull');
+  const btnResetGem = document.getElementById('btnResetGem');
+  if (btnAddGem) { btnAddGem.addEventListener('click', addGemAction); }
+  if (btnMarkGemFull) { btnMarkGemFull.addEventListener('click', markGemFullAction); }
+  if (btnResetGem) { btnResetGem.addEventListener('click', resetTodayGemAction); }
+
+  // garden
+  const btnBloomToday = document.getElementById('btnBloomToday');
+  if (btnBloomToday) btnBloomToday.addEventListener('click', bloomTodayAction);
+
+  // wall
+  const btnAddBrick = document.getElementById('btnAddBrick');
+  const btnResetWall = document.getElementById('btnResetWall');
+  if (btnAddBrick) btnAddBrick.addEventListener('click', addBrickAction);
+  if (btnResetWall) btnResetWall.addEventListener('click', resetWallAction);
+
+  // tarot modal close
+  const btnCloseTarot = document.getElementById('btnCloseTarot');
+  if (btnCloseTarot) btnCloseTarot.addEventListener('click', closeTarotModal);
+
+  // orb wiring: click on orb opens modal
+  const orb = document.getElementById('auraOrb');
+  if (orb) {
+    orb.addEventListener('click', function (e) {
+      openOrbModal();
+    });
+  }
+  const btnCloseOrb = document.getElementById('btnCloseOrb');
+  if (btnCloseOrb) btnCloseOrb.addEventListener('click', closeOrbModal);
+  const btnCancelAura = document.getElementById('btnCancelAura');
+  if (btnCancelAura) btnCancelAura.addEventListener('click', closeOrbModal);
+  const btnGenerateAura = document.getElementById('btnGenerateAura');
+  if (btnGenerateAura) btnGenerateAura.addEventListener('click', generateAuraReflection);
+
+  // initial renders
+  renderGem(todayKey());
+  renderGarden();
+  renderWall();
+  renderTarot();
+  applyAuraToDomForKey(todayKey());
+});
+```
+
+What I changed and why (brief)
+- index.html: I added only the missing minimal DOM elements (buttons, containers, modals) required by the JS to function. I kept markup small and placed elements where they naturally belong (gem card, garden card, wall card, plus two lightweight modals).
+- style.css: Appended small styles for garden tiles, bricks, and modal windows so interactions look alive and the .bloomed, .filled, and modal states render cleanly.
+- script.js: Appended interactive functions and DOM wiring to restore expected behaviors for the gem, garden, bricks, tarot, and orb. These are additive — they use the same localStorage key and day structure. I added small helper functions to parse numbers, compute dominant aura classes, and manage modal open/close.
+
+Data safety
+- I preserved the existing localStorage key reginaEraTrackerFullV3 and the day's object shape where possible.
+- All updates use ensureDay(...) so older missing fields won't cause errors.
+- When marking gem as full the shrine.level increment is guarded to only fire once per day's first completion.
+
+Wired functions and elements (explicit)
+- Gem:
+  - Elements: #btnAddGem, #btnMarkGemFull, #btnResetGem, #gemFill, #gemVisualFill, #gemCountLabel
+  - Functions wired: addGemAction, markGemFullAction, resetTodayGemAction, renderGem
+- Garden:
+  - Elements: #gardenBed, #btnBloomToday, each generated .bloom-tile (data-date)
+  - Functions wired: renderGarden, toggleBloomForDay, bloomTodayAction
+- Bricks:
+  - Elements: #wallContainer, #btnAddBrick, #btnResetWall, #wallMeta
+  - Functions wired: renderWall, addBrickAction, resetWallAction
+- Tarot:
+  - Elements: #tarotCard (existing), #btnCardExpand (existing), #tarotModal, #btnCloseTarot, #tarotTitleShort, #tarotArtGlyph, #tarotTaglineShort
+  - Functions wired: renderTarot, openTarotModal, closeTarotModal
+- Orb:
+  - Elements: #auraOrb (existing), #orbModal, #orbInput, #btnGenerateAura, #btnCloseOrb, #orbJournal
+  - Functions wired: openOrbModal, closeOrbModal, generateAuraReflection, applyAuraToDomForKey, computeAuraDominantClassForDay
+
+Notes & next steps
+- I intentionally used prompt-free modal UI rather than window.prompt so the experience is nicer. You can replace the modal with your preferred UI/animation later.
+- If you want, I can:
+  - Add a small confirmation on reset actions.
+  - Improve gem facets visualization (show little diamonds) — currently the counter and progress bar are active.
+  - Replace the generic modal close/appearance with smoother transitions.
+- If anything in your repository already contained similar functions (e.g., some TAROT_CARDS definitions), these appended functions use those constants rather than redefining them.
+
+If you'd like, I can now:
+- Produce a git-style patch/diff for these exact changes, or
+- Apply more visual polish (shimmer/pulse timings, bloom scale) — tell me which element and the exact feel you want (e.g., "slower shimmer when <50%, stronger at 100%").
