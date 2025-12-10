@@ -121,7 +121,139 @@
       <pre id="auraLog" class="aura-log"></pre>
     </div>
   </div>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Regina Era Tracker</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <h1 class="app-title">Regina Era Tracker</h1>
+      <p class="subtitle">soft, steady, daily practice — gems, garden, bricks, tarot & aura</p>
+    </div>
+  </header>
 
+  <main class="container">
+    <section class="grid">
+      <!-- Daily Gem Card -->
+      <div class="card" id="cardGem">
+        <h2 class="card-title">Daily Gem</h2>
+        <div class="card-body">
+          <div class="gem-visual-wrap">
+            <!-- diamond rotated container; fill handled by CSS & JS -->
+            <div id="gemDiamond" class="gem-diamond" aria-hidden="true">
+              <div class="gem-fill" id="gemFill"></div>
+              <!-- subtle internal facets for richer look -->
+              <div class="gem-facet facet-a"></div>
+              <div class="gem-facet facet-b"></div>
+              <div class="gem-facet facet-c"></div>
+            </div>
+
+            <div class="gem-info">
+              <div id="gemCount" class="gem-count">0 / 8</div>
+              <div class="gem-controls">
+                <button id="btnGemAdd" class="btn primary">+1 win</button>
+                <button id="btnGemFull" class="btn">Set full</button>
+                <button id="btnGemReset" class="btn neutral">Reset</button>
+              </div>
+            </div>
+          </div>
+          <textarea id="gemNotes" class="notes" placeholder="Today's gem notes (saved)"></textarea>
+        </div>
+      </div>
+
+      <!-- Weekly Garden Card -->
+      <div class="card" id="cardGarden">
+        <h2 class="card-title">Weekly Garden</h2>
+        <div class="card-body">
+          <div id="gardenRow" class="garden-row" aria-label="7 day garden"></div>
+          <div class="garden-controls">
+            <button id="btnBloomToday" class="btn primary">Bloom today</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Brick Wall Card -->
+      <div class="card" id="cardWall">
+        <h2 class="card-title">Brick Wall</h2>
+        <div class="card-body">
+          <div id="wallGrid" class="wall-grid" aria-hidden="true"></div>
+          <div class="wall-meta">
+            <div id="wallLabel">0 / 12</div>
+            <div id="wallsCompleted" class="muted">Walls completed: 0</div>
+          </div>
+          <div class="wall-controls">
+            <button id="btnAddBrick" class="btn primary">Add brick</button>
+            <button id="btnCompleteWall" class="btn">Complete wall</button>
+            <button id="btnResetWall" class="btn neutral">Reset</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tarot Card -->
+      <div class="card" id="cardTarot">
+        <h2 class="card-title">Daily Tarot</h2>
+        <div class="card-body tarot-body">
+          <div id="tarotCard" class="tarot-card" role="group" aria-label="daily tarot">
+            <div id="tarotGlyph" class="tarot-glyph" aria-hidden="true"></div>
+            <div class="tarot-text">
+              <div id="tarotTitle" class="tarot-title">—</div>
+              <div id="tarotTagline" class="tarot-tagline muted">—</div>
+            </div>
+          </div>
+          <div class="tarot-controls">
+            <button id="btnTarotOpen" class="btn primary">View meaning</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Angel Aura Orb -->
+      <div class="card" id="cardOrb">
+        <h2 class="card-title">Angel Aura Orb</h2>
+        <div class="card-body orb-body">
+          <div id="auraOrb" class="orb" title="Open aura log" role="button" aria-pressed="false"></div>
+          <div class="orb-controls">
+            <button id="btnOpenAura" class="btn primary">Open aura</button>
+          </div>
+          <div id="auraSummary" class="aura-summary muted"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Tarot modal -->
+  <div id="modalTarot" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="tarotTitle">
+    <div class="modal-panel">
+      <button id="btnCloseTarot" class="modal-close" aria-label="Close">×</button>
+      <h3 id="modalTarotTitle">Card</h3>
+      <div id="modalTarotGlyph" class="modal-glyph"></div>
+      <p id="modalTarotMeaning" class="modal-meaning"></p>
+    </div>
+  </div>
+
+  <!-- Aura modal -->
+  <div id="modalAura" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="auraModalTitle">
+    <div class="modal-panel">
+      <button id="btnCloseAura" class="modal-close" aria-label="Close">×</button>
+      <h3 id="auraModalTitle">Log Angel Numbers</h3>
+      <p class="muted">Enter numbers separated by commas or spaces (e.g., 222, 333 444)</p>
+      <textarea id="auraInput" class="notes" placeholder="222, 333, 444"></textarea>
+      <div style="margin-top:8px; display:flex; gap:8px;">
+        <button id="btnLogAura" class="btn primary">Log numbers</button>
+        <button id="btnClearAuraInput" class="btn neutral">Clear</button>
+      </div>
+      <h4 style="margin-top:12px;">Today's aura log</h4>
+      <pre id="auraLog" class="aura-log"></pre>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
   <script src="script.js"></script>
 </body>
 </html>
