@@ -239,3 +239,70 @@
   <script src="script.js"></script>
 </body>
 </html>
+<!-- Appended small interactive controls and modals (add near relevant sections in index.html) -->
+<!-- GEM controls: Add inside .card-gem (after .progress-bar) -->
+<div class="gem-controls" style="margin-top:0.6rem; display:flex; gap:0.5rem; align-items:center;">
+  <button id="btnAddGem" class="primary">Add Win</button>
+  <button id="btnMarkGemFull" class="secondary">Mark 100%</button>
+  <button id="btnResetGem" class="secondary">Reset Today</button>
+  <div id="gemCountLabel" style="margin-left:auto; font-size:0.95rem; opacity:0.85;"></div>
+</div>
+
+<!-- GARDEN: Add a small garden view in the main .cards (near gem card or after) -->
+<div class="card card-garden" style="margin-top:1rem;">
+  <div class="card-header">
+    <h2>Weekly Garden</h2>
+    <span class="pill">7-day</span>
+  </div>
+  <p class="muted">Tap a day to bloom it. Bloom today to charge your consistency.</p>
+  <div id="gardenBed" class="garden-bed" style="display:flex; gap:0.5rem; align-items:flex-end; margin-top:0.6rem;"></div>
+  <div style="margin-top:0.6rem;">
+    <button id="btnBloomToday" class="primary">Bloom today</button>
+  </div>
+</div>
+
+<!-- BRICK WALL: Add a simple wall UI -->
+<div class="card card-wall" style="margin-top:1rem;">
+  <div class="card-header">
+    <h2>Brick Wall</h2>
+    <span class="pill">12 bricks</span>
+  </div>
+  <div id="wallContainer" style="margin-top:0.6rem; display:grid; grid-template-columns: repeat(4, 1fr); gap:0.4rem; align-items:center;"></div>
+  <div style="margin-top:0.6rem; display:flex; gap:0.5rem;">
+    <button id="btnAddBrick" class="primary">Add Brick</button>
+    <button id="btnResetWall" class="secondary">Reset Wall</button>
+    <div id="wallMeta" style="margin-left:auto; font-size:0.95rem; opacity:0.85;"></div>
+  </div>
+</div>
+
+<!-- TAROT: ensure existing Open card button exists; add a modal for the full card -->
+<div id="tarotModal" class="modal hidden" aria-hidden="true">
+  <div class="modal-panel">
+    <button id="btnCloseTarot" class="modal-close">Close</button>
+    <div id="tarotModalContent">
+      <h3 id="tarotModalTitle"></h3>
+      <div id="tarotModalGlyph" style="font-size:3rem; margin:0.4rem 0;"></div>
+      <p id="tarotModalMeaning"></p>
+    </div>
+  </div>
+</div>
+
+<!-- ORB: modal for entering aura numbers -->
+<div id="orbModal" class="modal hidden" aria-hidden="true">
+  <div class="modal-panel">
+    <button id="btnCloseOrb" class="modal-close">Close</button>
+    <h3>Log angel numbers</h3>
+    <p class="muted">Enter numbers separated by commas or spaces (e.g., 222, 333 444).</p>
+    <textarea id="orbInput" rows="4" style="width:100%; margin-top:0.5rem;" placeholder="e.g. 222, 333, 444"></textarea>
+    <div style="margin-top:0.5rem; display:flex; gap:0.5rem;">
+      <button id="btnGenerateAura" class="primary">Generate reflection</button>
+      <button id="btnCancelAura" class="secondary">Cancel</button>
+    </div>
+    <div style="margin-top:0.6rem;">
+      <strong>Today's aura journal</strong>
+      <pre id="orbJournal" style="white-space:pre-wrap; background:whitesmoke; padding:0.5rem; border-radius:6px; max-height:160px; overflow:auto;"></pre>
+    </div>
+  </div>
+</div>
+
+<!-- Minimal modal CSS and DOM helper containers rely on style.css additions below -->
