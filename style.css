@@ -1571,3 +1571,85 @@ EOF
 
 /* small utility */
 .hidden { display:none !important; }
+/* ADDITION: small UI styles for garden tiles, bricks, and modals (append to end of file) */
+
+/* Garden tiles */
+.garden-bed {
+  align-items: flex-end;
+}
+.bloom-tile {
+  width: 44px;
+  height: 56px;
+  background: linear-gradient(180deg, rgba(248,244,236,0.9), rgba(255,255,255,0.9));
+  border-radius: 8px;
+  box-shadow: 0 6px 12px rgba(0,0,0,0.06);
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  padding-bottom:8px;
+  cursor:pointer;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+  font-size:0.75rem;
+  color:var(--vervain);
+}
+.bloom-tile.today {
+  outline: 2px dashed rgba(154,63,74,0.12);
+}
+.bloom-tile.bloomed {
+  background: linear-gradient(180deg, rgba(189,104,9,0.06), rgba(154,63,74,0.04));
+  transform: translateY(-6px) scale(1.03);
+  box-shadow: 0 12px 30px rgba(189,104,9,0.06);
+}
+
+/* Brick visuals */
+.brick {
+  height: 28px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(240,236,230,0.9));
+  box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:var(--vervain);
+  font-size:0.85rem;
+  transition: transform 160ms ease, background 220ms ease;
+}
+.brick.filled {
+  background: linear-gradient(180deg, rgba(154,63,74,0.92), rgba(189,104,9,0.12));
+  color: #fff;
+  transform: translateY(-4px);
+}
+
+/* Modal base */
+.modal {
+  position: fixed;
+  inset: 0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background: rgba(9,7,8,0.35);
+  z-index: 1200;
+}
+.modal.hidden { display:none; }
+.modal-panel {
+  background: var(--ivory);
+  color: var(--vervain);
+  padding: 1rem;
+  border-radius: 12px;
+  width: min(640px, 92%);
+  box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+  position: relative;
+}
+.modal-close {
+  position:absolute;
+  right:12px;
+  top:10px;
+  background:transparent;
+  border:none;
+  cursor:pointer;
+  font-weight:600;
+  color:var(--dusty-blue);
+}
+
+/* small helper */
+.muted { opacity: 0.75; font-size:0.95rem; }
