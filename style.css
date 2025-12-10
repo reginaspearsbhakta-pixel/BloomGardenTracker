@@ -1457,3 +1457,117 @@ index 5a121b964cb80d1c326d175500f5c0f1fceacbc5..46a2622d94689b2bb456e42ff38b8c11
  
 EOF
 )
+/* ADDITION: Gem shimmer, 100% glow, bloom pop, and aura-orb theme animations */
+
+/* Gem visuals */
+.gem-visual-outline {
+  width: 120px;
+  height: 120px;
+  border-radius: 18px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  position: relative;
+  background: linear-gradient(180deg, rgba(255,255,255,0.6), rgba(248,244,236,0.9));
+  box-shadow: 0 8px 20px rgba(0,0,0,0.08), inset 0 -6px 18px rgba(0,0,0,0.03);
+}
+.gem-visual-fill {
+  width: 86px;
+  height: 86px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(154,63,74,0.08), rgba(189,104,9,0.06));
+  transition: box-shadow 280ms ease, transform 280ms ease, background 300ms ease;
+  position: relative;
+  overflow: hidden;
+}
+
+/* subtle gem core shimmer */
+.gem-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.18) 50%, rgba(255,255,255,0.06) 100%);
+  transform: translateX(-60%);
+  pointer-events: none;
+  animation: gemShimmer 3.2s linear infinite;
+  mix-blend-mode: overlay;
+}
+
+/* stronger glow at full charge */
+.gem-full {
+  box-shadow:
+    0 6px 22px rgba(189,104,9,0.08),
+    0 0 40px rgba(212,175,55,0.18),
+    0 0 90px rgba(189,104,9,0.08);
+  transform: scale(1.02);
+}
+.gem-full::after {
+  animation-duration: 2.2s;
+}
+
+@keyframes gemShimmer {
+  0% { transform: translateX(-60%); opacity: 0; }
+  10% { opacity: 1; }
+  50% { transform: translateX(60%); opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateX(160%); opacity: 0; }
+}
+
+/* Bloom pop animation for when a day becomes bloomed */
+@keyframes bloomPop {
+  0%   { transform: scale(0.6) translateY(8px); opacity: 0; filter: blur(4px); }
+  60%  { transform: scale(1.04) translateY(-2px); opacity: 1; filter: blur(0px); }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+.bloomed {
+  animation: bloomPop 420ms cubic-bezier(.2,.9,.3,1);
+  will-change: transform, opacity;
+}
+
+/* Aura orb themes and subtle animations */
+.aura-orb.theme-papaya .aura-orb-core {
+  background: radial-gradient(circle at 35% 30%, rgba(189,104,9,0.9), rgba(212,175,55,0.65) 40%, rgba(189,104,9,0.15) 80%);
+}
+.aura-orb.theme-fig .aura-orb-core {
+  background: radial-gradient(circle at 35% 35%, rgba(154,63,74,0.92), rgba(212,175,55,0.12));
+}
+.aura-orb.theme-vervain .aura-orb-core {
+  background: radial-gradient(circle at 40% 40%, rgba(18,27,19,0.95), rgba(60,74,99,0.06));
+}
+.aura-orb.theme-dusty .aura-orb-core {
+  background: radial-gradient(circle at 35% 35%, rgba(60,74,99,0.95), rgba(212,175,55,0.06));
+}
+
+/* Orb halos and different subtle motion per dominant */
+.aura-orb::before { /* halo */
+  opacity: 0.9;
+  transition: opacity 220ms ease, transform 300ms ease;
+}
+.aura-orb.theme-papaya::before { filter: blur(6px); background: radial-gradient(circle, rgba(189,104,9,0.12), transparent 40%); animation: orbPulse 3.6s ease-in-out infinite; }
+.aura-orb.theme-fig::before { filter: blur(8px); background: radial-gradient(circle, rgba(154,63,74,0.14), transparent 45%); animation: orbHeartbeat 2.6s ease-in-out infinite; }
+.aura-orb.theme-vervain::before { filter: blur(10px); background: radial-gradient(circle, rgba(18,27,19,0.12), transparent 45%); animation: orbSlowPulse 5.2s ease-in-out infinite; }
+.aura-orb.theme-dusty::before { filter: blur(8px); background: radial-gradient(circle, rgba(60,74,99,0.12), transparent 45%); animation: orbShimmer 3.2s linear infinite; }
+
+@keyframes orbPulse {
+  0% { transform: scale(0.98); opacity: 0.85; }
+  50% { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(0.98); opacity: 0.85; }
+}
+@keyframes orbHeartbeat {
+  0% { transform: scale(1); opacity: 0.86; }
+  30% { transform: scale(1.08); opacity: 1; }
+  60% { transform: scale(1.02); opacity: 0.95; }
+  100% { transform: scale(1); opacity: 0.86; }
+}
+@keyframes orbSlowPulse {
+  0% { transform: scale(0.97); opacity: 0.8; }
+  60% { transform: scale(1.03); opacity: 1; }
+  100% { transform: scale(0.97); opacity: 0.8; }
+}
+@keyframes orbShimmer {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* small utility */
+.hidden { display:none !important; }
