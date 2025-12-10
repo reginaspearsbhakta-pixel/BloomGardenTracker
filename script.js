@@ -1,1684 +1,488 @@
-// Basic config
-const NUM_FACETS = 6;
+/* Regina Era Tracker - clean front-end rewrite
+   Features:
+   - Daily Gem
+   - Weekly Garden
+   - Brick Wall
+   - Daily Tarot
+   - Angel Aura Orb
+
+   Storage key: 'reginaEraTracker'
+*/
+
+const STORAGE_KEY = 'reginaEraTracker';
+const GEM_TARGET = 8;
 const NUM_BLOOMS = 7;
 const NUM_BRICKS = 12;
-const DAILY_GEM_TARGET = 8; // wins to hit 100%
 
-const SHRINE_ITEMS = [
-  { id: 'candle', label: 'Candle', emoji: '🕯️' },
-  { id: 'tea', label: 'Tea', emoji: '🍵' },
-  { id: 'jewelry', label: 'Jewelry', emoji: '💍' },
-  { id: 'flowers', label: 'Flowers', emoji: '🌸' },
-  { id: 'bath', label: 'Bath', emoji: '🛁' },
-  { id: 'journal', label: 'Journal', emoji: '📓' },
-  { id: 'moon', label: 'Early night', emoji: '🌙' }
-];
-
-// Local storage
-let data = loadData();
-
-function loadData() {
+/* ---------------------------
+   Helpers: state load/save & date
+   --------------------------- */
+function loadState() {
   try {
-    const raw = localStorage.getItem('reginaEraTrackerFullV3');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (!parsed.days) parsed.days = {};
-      if (!parsed.wall) parsed.wall = { bricksInCurrent: 0, wallsCompleted: 0 };
-      if (!parsed.shrine) parsed.shrine = { level: 0, placed: [] };
-      return parsed;
-    }
-  } catch (e) {}
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    console.error('Failed to parse state', e);
+  }
+  // default state
   return {
-    days: {}, // by YYYY-MM-DD
-    wall: {
-      bricksInCurrent: 0,
-      wallsCompleted: 0
-    },
-    shrine: {
-      level: 0,
-      placed: []
-    }
+    gem: {},      // { '2025-12-10': { wins: 0, notes: '' } }
+    garden: {},   // { '2025-12-10': { bloomed: true } }
+    bricks: { currentBricks: 0, wallsCompleted: 0 },
+    aura: {},     // { '2025-12-10': { numbers: [], log: [], note: '' } }
+    tarot: {}     // { '2025-12-10': { cardId: 'the-sun' } }
   };
 }
-
-function saveData() {
-  localStorage.setItem('reginaEraTrackerFullV3', JSON.stringify(data));
-}
-
-function todayKey() {
-  const d = new Date();
-  const offset = d.getTimezoneOffset();
-  const local = new Date(d.getTime() - offset * 60000);
-  return local.toISOString().slice(0, 10);
-}
-
-function ensureDay(key) {
-  if (!data.days[key]) {
-    data.days[key] = {
-      gemFacets: 0,
-      gemCompleted: false,
-      bloom: false,
-      gemNotes: "",
-      gardenNotes: "",
-      brickNotes: "",
-      tarotId: null,
-      auraNumbers: [],
-      auraNote: ""
-    };
-  } else {
-    const d = data.days[key];
-    if (typeof d.gemFacets !== 'number') d.gemFacets = 0;
-    if (typeof d.gemCompleted !== 'boolean') d.gemCompleted = false;
-    if (typeof d.bloom !== 'boolean') d.bloom = false;
-    if (typeof d.gemNotes !== 'string') d.gemNotes = '';
-    if (typeof d.gardenNotes !== 'string') d.gardenNotes = '';
-    if (typeof d.brickNotes !== 'string') d.brickNotes = '';
-    if (!('tarotId' in d)) d.tarotId = null;
-    if (!Array.isArray(d.auraNumbers)) d.auraNumbers = [];
-    if (typeof d.auraNote !== 'string') d.auraNote = '';
+function saveState() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.error('Failed to save state', e);
   }
-  if (!data.shrine) data.shrine = { level: 0, placed: [] };
-  if (!Array.isArray(data.shrine.placed)) data.shrine.placed = [];
+}
+function getTodayKey(date = new Date()) {
+  const d = new Date(date.getTime() - date.getTimezoneOffset()*60000);
+  return d.toISOString().slice(0,10);
 }
 
-// Tarot cards
+/* in-memory state */
+let state = loadState();
+
+/* ---------------------------
+   Utility: safe ensure day objects
+   --------------------------- */
+function ensureGem(dateKey) {
+  if (!state.gem[dateKey]) state.gem[dateKey] = { wins: 0, notes: '' };
+}
+function ensureGarden(dateKey) {
+  if (!state.garden[dateKey]) state.garden[dateKey] = { bloomed: false };
+}
+function ensureAura(dateKey) {
+  if (!state.aura[dateKey]) state.aura[dateKey] = { numbers: [], log: [], note: '' };
+}
+function ensureTarot(dateKey) {
+  if (!state.tarot[dateKey]) state.tarot[dateKey] = { cardId: null };
+}
+
+/* ---------------------------
+   Tarot cards definition
+   --------------------------- */
 const TAROT_CARDS = [
-  {
-    id: "sag-arrow-morning",
-    title: "Sagittarian Arrow Morning",
-    short: "Arrow Morning",
-    glyph: "🏹",
-    theme: 1,
-    tagline: "Aim your first hour at what matters most.",
-    meaning: "Today wants a clear aim. Use your first hour to point your energy at one thing that actually moves life forward — even a tiny step. Say no to scattered tabs and yes to one meaningful arrow."
-  },
-  {
-    id: "gemini-butterfly",
-    title: "Gemini Butterfly Brain",
-    short: "Butterfly Brain",
-    glyph: "🦋",
-    theme: 2,
-    tagline: "Follow curiosity, not chaos.",
-    meaning: "Let your mind flit — but within a garden, not a storm. Choose 1–2 branches to explore and tuck everything else into a later list. Your ideas are valid; they just need gentle lanes."
-  },
-  {
-    id: "taurus-soft-ground",
-    title: "Taurus Soft Grounding",
-    short: "Soft Grounding",
-    glyph: "🌿",
-    theme: 3,
-    tagline: "Slow, steady, sensual presence.",
-    meaning: "Today is about anchoring into your body: warm drinks, comfortable clothes, one grounded task at a time. Your nervous system is your first home — treat it like a sacred space."
-  },
-  {
-    id: "future-self-portal",
-    title: "Future Self Portal",
-    short: "Future Portal",
-    glyph: "🚪",
-    theme: 4,
-    tagline: "One brave move she’ll thank you for.",
-    meaning: "Choose the tiniest action your future self would high-five you for: send the message, open the bill, schedule the appointment. It doesn’t have to be big to be timeline-altering."
-  },
-  {
-    id: "micro-integrity-thread",
-    title: "Micro-Integrity Thread",
-    short: "Integrity Thread",
-    glyph: "🧵",
-    theme: 2,
-    tagline: "Keep one promise to yourself.",
-    meaning: "Pick a promise so small it almost feels silly — and keep it. You’re quietly rewiring your brain to believe you when you say, 'I’ve got us.' These threads become a net that catches you."
-  },
-  {
-    id: "motherhood-magic",
-    title: "Motherhood Magic",
-    short: "Motherhood Magic",
-    glyph: "🧸",
-    theme: 3,
-    tagline: "Your presence is the spell.",
-    meaning: "The way you look at your babies, the tone you use with yourself, the softness you allow — that’s the magic. Let 'good enough but loving' be your baseline enchantment today."
-  },
-  {
-    id: "brick-by-brick",
-    title: "Brick by Brick Builder",
-    short: "Brick Builder",
-    glyph: "🧱",
-    theme: 4,
-    tagline: "Tiny boring moves = iconic life later.",
-    meaning: "Today is quietly foundational. Each email, phone call, or tiny money move is one more brick in a life that feels stable. You don’t need to feel motivated — you just need to lay one brick."
-  },
-  {
-    id: "night-garden-reset",
-    title: "Night Garden Reset",
-    short: "Night Garden",
-    glyph: "🌙",
-    theme: 1,
-    tagline: "Close the day with softness, not judgment.",
-    meaning: "However today went, you’re allowed a gentle reset. Tidy one corner, wash your face, or light a candle. Let the day fall off you like petals — tomorrow gets fresh soil."
-  }
+  { id: 'sun', title: 'The Sun', glyph: '☼', tagline: 'Warmth, clarity', meaning: 'A day of warmth, clarity, and small victories. Focus on what brings light.' },
+  { id: 'moon', title: 'The Moon', glyph: '◐', tagline: 'Intuition, rest', meaning: 'Trust your inner guide. Slow down and listen, dreams carry hints.' },
+  { id: 'star', title: 'The Star', glyph: '✦', tagline: 'Hope, healing', meaning: 'Gentle healing energy. Replenish yourself and share soft light.' },
+  { id: 'hermit', title: 'The Hermit', glyph: '◎', tagline: 'Focus, study', meaning: 'A small retreat fuels insight. Take a quiet hour for deep work.' },
+  { id: 'empress', title: 'The Empress', glyph: '♁', tagline: 'Nurture, steadiness', meaning: 'Tend to your environment and body. Comfort creates momentum.' },
+  { id: 'magus', title: 'The Magus', glyph: '✶', tagline: 'Craft, speak', meaning: 'Your words and craft have effect. Try a clear small action.' },
+  { id: 'temperance', title: 'Temperance', glyph: '△', tagline: 'Balance', meaning: 'Small balance shifts accumulate. Mix routine with small joys.' },
+  { id: 'strength', title: 'Strength', glyph: '♯', tagline: 'Gentle power', meaning: 'Soft discipline wins. Show up and honor limits kindly.' }
 ];
 
-function getDailyTarotId(key) {
-  const d = new Date(key);
-  const serial = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
-  const index = serial % TAROT_CARDS.length;
-  return TAROT_CARDS[index].id;
+/* deterministic index for date */
+function tarotIndexForKey(key) {
+  // simple deterministic hash: sum of char codes
+  let sum = 0;
+  for (let i=0;i<key.length;i++) sum += key.charCodeAt(i);
+  return sum % TAROT_CARDS.length;
 }
 
-function renderTarotCard() {
-  const key = todayKey();
-  ensureDay(key);
-  if (!data.days[key].tarotId) {
-    data.days[key].tarotId = getDailyTarotId(key);
-    saveData();
-  }
-  const cardId = data.days[key].tarotId;
-  const card = TAROT_CARDS.find(c => c.id === cardId) || TAROT_CARDS[0];
-
-  const face = document.getElementById('tarotFace');
-  const titleShort = document.getElementById('tarotTitleShort');
-  const taglineShort = document.getElementById('tarotTaglineShort');
-  const glyph = document.getElementById('tarotArtGlyph');
-  const modalContent = document.getElementById('cardModalContent');
-
-  if (face) {
-    face.className = 'tarot-face theme-' + card.theme;
-  }
-  if (glyph) glyph.textContent = card.glyph;
-  if (titleShort) titleShort.textContent = card.short;
-  if (taglineShort) taglineShort.textContent = card.tagline;
-  if (modalContent) {
-    modalContent.innerHTML = `
-      <div class="tarot-title">${card.title}</div>
-      <div class="tarot-tagline">${card.tagline}</div>
-      <div class="tarot-meaning">${card.meaning}</div>
-    `;
-  }
-}
-
-// Angel numbers – multiple fresh messages per number
-
+/* ---------------------------
+   ANGEL MEANINGS
+   --------------------------- */
 const ANGEL_MEANINGS = {
-  1: [
-    "New beginnings — tiny brave moves count.",
-    "Leadership energy is on; go first in a small way.",
-    "Your decisions today plant seeds for a new chapter."
+  '2': [
+    'Support is near — small steady steps matter.',
+    'A reminder to breathe and accept help.',
+    'Balance and gentle structure are supporting you.'
   ],
-  2: [
-    "Balance and partnership — you don’t have to carry it alone.",
-    "Soften your schedule so your nervous system can breathe.",
-    "Tiny harmonizing moves (text replies, dishes, prep) restore flow."
+  '3': [
+    'Creative energy spark — try a tiny experiment.',
+    'Play opens new doors; curiosity leads.',
+    'Communication blossoms; say one kind truth.'
   ],
-  3: [
-    "Creative flow — speak, write, or play something out of your head.",
-    "Your ideas want a low-stakes outlet, not perfection.",
-    "Express instead of suppress — even if it’s just messy notes."
+  '4': [
+    'Grounding energy — build one reliable habit.',
+    'Practical care brings comfort later.',
+    'Tend the foundation: rest, food, shelter, rhythm.'
   ],
-  4: [
-    "Stability — one small routine will do more than a mood swing.",
-    "Foundations first: food, water, sleep, body comfort.",
-    "You’re quietly building a life that holds you, not just looks good."
-  ],
-  5: [
-    "Change is active — let something be easier than you’re used to.",
-    "You’re outgrowing an old micro-habit today.",
-    "Tiny experiments are safe; you can always adjust."
-  ],
-  7: [
-    "Inner wisdom — your gut already voted, listen to it.",
-    "You’re allowed to move slower while your intuition catches up.",
-    "Alone-time or quiet pockets will give you the next right step."
-  ],
-  9: [
-    "Release era — something can be 'good enough' and done.",
-    "You’re allowed to step out of old roles and patterns.",
-    "Closing loops now makes room for better offers later."
-  ],
-  11: [
-    "Portal number — the way you talk to yourself today matters.",
-    "Your self-trust is glitching into a higher version.",
-    "Notice what repeats today; that’s your portal hint."
-  ],
-  22: [
-    "Master builder — tiny boring steps support huge dreams.",
-    "Write or refine one practical piece of a big vision.",
-    "You’re allowed to think long-term even in a messy season."
-  ],
-  33: [
-    "Compassion leadership — your softness teaches others how.",
-    "Offer yourself the tone you’d use with a friend.",
-    "Healing doesn’t have to be dramatic; it can be a nap and a snack."
-  ],
-  44: [
-    "Protection — you’re more supported than you feel.",
-    "Your effort is seen even when results are delayed.",
-    "You can relax your shoulders; something bigger has your back."
-  ],
-  55: [
-    "Big upgrades — you’re not overreacting; your standards are rising.",
-    "Old coping tools might feel itchy; that’s growth.",
-    "You’re allowed to redesign routines so they fit this era of you."
+  '5': [
+    'Change approaches — stay curious and adaptive.',
+    'A small pivot opens surprising options.',
+    'Movement and exploration are favored this day.'
   ]
 };
 
-function angelColorForNumber(n) {
-  if (n === 2 || n === 22) return 'papaya';
-  if (n === 3 || n === 33) return 'fig';
-  if (n === 4 || n === 44) return 'vervain';
-  if (n === 5 || n === 55) return 'dusty';
-  return null;
-}
-
-function getAuraThemeAndLayers(nums) {
-  if (!nums || !nums.length) return { theme: 'neutral', layers: [] };
-  const set = new Set(nums);
-  const layers = [];
-  if ([2,22].some(n => set.has(n))) layers.push('papaya');
-  if ([3,33].some(n => set.has(n))) layers.push('fig');
-  if ([4,44].some(n => set.has(n))) layers.push('vervain');
-  if ([5,55].some(n => set.has(n))) layers.push('dusty');
-  if (!layers.length) return { theme: 'neutral', layers: [] };
-  if (layers.length === 1) return { theme: layers[0], layers };
-  return { theme: 'mix', layers };
-}
-
-function renderAuraOrb() {
-  const orb = document.getElementById('auraOrb');
-  if (!orb) return;
-  const key = todayKey();
-  ensureDay(key);
-  const auraNums = data.days[key].auraNumbers || [];
-  const count = auraNums.length;
-  let level = 0;
-  if (count >= 1) level = 1;
-  if (count >= 2) level = 2;
-  if (count >= 3) level = 3;
-  if (count >= 4) level = 4;
-
-  const { theme } = getAuraThemeAndLayers(auraNums);
-  orb.className = 'aura-orb level-' + level + ' theme-' + theme + (auraNums.length ? ' active' : '');
-}
-
-function renderOrbChips(nums) {
-  const row = document.getElementById('orbSeenToday');
-  if (!row) return;
-  row.innerHTML = '';
-  if (!nums || !nums.length) return;
-  nums.forEach(n => {
-    const div = document.createElement('div');
-    const color = angelColorForNumber(n);
-    let extra = '';
-    if (color === 'papaya') extra = ' chip-papaya';
-    if (color === 'fig') extra = ' chip-fig';
-    if (color === 'vervain') extra = ' chip-vervain';
-    if (color === 'dusty') extra = ' chip-dusty';
-    div.className = 'chip' + extra;
-    div.textContent = n;
-    row.appendChild(div);
-  });
-}
-
-function attachOrbHandlers() {
-  const orb = document.getElementById('auraOrb');
-  const modal = document.getElementById('orbModal');
-  const btnClose = document.getElementById('btnOrbClose');
-  const btnGenerate = document.getElementById('btnOrbGenerate');
-  const btnSave = document.getElementById('btnOrbSave');
-  const input = document.getElementById('orbInput');
-  const note = document.getElementById('orbNote');
-
-  if (orb) {
-    orb.addEventListener('click', () => {
-      const key = todayKey();
-      ensureDay(key);
-      const auraNums = data.days[key].auraNumbers || [];
-      const auraNote = data.days[key].auraNote || '';
-      renderOrbChips(auraNums);
-      input.value = '';
-      note.value = auraNote;
-      if (modal) modal.classList.add('visible');
-    });
-  }
-
-  if (btnClose && modal) {
-    btnClose.addEventListener('click', () => modal.classList.remove('visible'));
-  }
-
-  if (modal) {
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) modal.classList.remove('visible');
-    });
-  }
-
-  if (btnGenerate && input && note) {
-    btnGenerate.addEventListener('click', () => {
-      const key = todayKey();
-      ensureDay(key);
-      const text = input.value || '';
-      const numbers = text.split(/[^0-9]+/).map(n => parseInt(n, 10)).filter(n => !isNaN(n));
-
-      if (!numbers.length) {
-        return;
-      }
-
-      // Update unique numbers for color/theme tracking
-      const uniqueSet = new Set(data.days[key].auraNumbers || []);
-      numbers.forEach(n => uniqueSet.add(n));
-      data.days[key].auraNumbers = Array.from(uniqueSet.values()).sort((a,b) => a-b);
-
-      // Build fresh reflection line(s) for every entry, even repeats
-      const snippets = numbers.map(n => {
-        const meanings = ANGEL_MEANINGS[n];
-        if (Array.isArray(meanings) && meanings.length) {
-          const pick = meanings[Math.floor(Math.random() * meanings.length)];
-          return `${n}: ${pick}`;
-        } else {
-          return `${n}: subtle guidance to stay present and gently course-correct.`;
-        }
-      });
-
-      const line = "• " + snippets.join(" | ");
-      note.value = (note.value ? note.value + "\n" : "") + line;
-      input.value = '';
-
-      saveData();
-      renderAuraOrb();
-      renderOrbChips(data.days[key].auraNumbers);
-    });
-  }
-
-  if (btnSave && note) {
-    btnSave.addEventListener('click', () => {
-      const key = todayKey();
-      ensureDay(key);
-      data.days[key].auraNote = note.value || '';
-      saveData();
-      renderAuraOrb();
-      if (modal) modal.classList.remove('visible');
-    });
-  }
-}
-
-// Helpers
-
-function getRecentDayKeys(daysBack) {
-  const keys = [];
-  const today = new Date(todayKey());
-  for (let i = 0; i < daysBack; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i);
-    keys.push(d.toISOString().slice(0, 10));
-  }
-  return keys;
-}
-
-function sumForRange(daysBack, field) {
-  const keys = getRecentDayKeys(daysBack);
-  let sum = 0;
-  for (const k of keys) {
-    if (data.days[k]) {
-      if (field === 'bloom') {
-        if (data.days[k].bloom) sum += 1;
-      } else if (field === 'gemFacets') {
-        sum += data.days[k].gemFacets || 0;
-      }
-    }
-  }
-  return sum;
-}
-
-function countDaysWithGem(daysBack) {
-  const keys = getRecentDayKeys(daysBack);
-  let sum = 0;
-  for (const k of keys) {
-    if (data.days[k] && (data.days[k].gemFacets || 0) > 0) sum += 1;
-  }
-  return sum;
-}
-
-function sumForMonth(field) {
-  const now = new Date(todayKey());
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  let sum = 0;
-  for (const key in data.days) {
-    const d = new Date(key);
-    if (d.getFullYear() === year && d.getMonth() === month) {
-      const dayData = data.days[key];
-      if (field === 'bloom' && dayData.bloom) sum += 1;
-      if (field === 'gemFacets') sum += dayData.gemFacets || 0;
-    }
-  }
-  return sum;
-}
-
-function sumForYear(field) {
-  const now = new Date(todayKey());
-  const year = now.getFullYear();
-  let sum = 0;
-  for (const key in data.days) {
-    const d = new Date(key);
-    if (d.getFullYear() === year) {
-      const dayData = data.days[key];
-      if (field === 'bloom' && dayData.bloom) sum += 1;
-      if (field === 'gemFacets') sum += dayData.gemFacets || 0;
-    }
-  }
-  return sum;
-}
-
-// Gem helpers
-
-function isGemFullForKey(key) {
-  ensureDay(key);
-  return (data.days[key].gemFacets || 0) >= DAILY_GEM_TARGET;
-}
-
-function handleGemFullTransition(key, wasFull, isFull) {
-  if (!wasFull && isFull) {
-    ensureDay(key);
-    data.days[key].gemCompleted = true;
-    if (data.shrine.level < SHRINE_ITEMS.length) {
-      data.shrine.level += 1;
-    }
-    saveData();
-  }
-}
-
-function setGemWins(count) {
-  const key = todayKey();
-  ensureDay(key);
-  const wasFull = isGemFullForKey(key);
-  const safe = Math.max(0, count);
-  data.days[key].gemFacets = safe;
-  const isFull = isGemFullForKey(key);
-  handleGemFullTransition(key, wasFull, isFull);
-  saveData();
-  render();
-}
-
-function addGemWin() {
-  const key = todayKey();
-  ensureDay(key);
-  const wasFull = isGemFullForKey(key);
-  data.days[key].gemFacets = (data.days[key].gemFacets || 0) + 1;
-  const isFull = isGemFullForKey(key);
-  handleGemFullTransition(key, wasFull, isFull);
-  saveData();
-  render();
-}
-
-// Garden
-
-function toggleTodayBloom() {
-  const key = todayKey();
-  ensureDay(key);
-  data.days[key].bloom = !data.days[key].bloom;
-  saveData();
-  render();
-}
-
-function resetWeek() {
-  const overlay = document.getElementById('gardenResetOverlay');
-  if (overlay) overlay.classList.add('visible');
-
-  setTimeout(() => {
-    const today = new Date(todayKey());
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
-      if (data.days[key]) {
-        data.days[key].bloom = false;
-      }
-    }
-    saveData();
-    render();
-    if (overlay) overlay.classList.remove('visible');
-  }, 700);
-}
-
-// Bricks
-
-function setBricksInCurrent(count) {
-  const safe = Math.max(0, Math.min(NUM_BRICKS, count));
-  data.wall.bricksInCurrent = safe;
-  saveData();
-  render();
-}
-
-function resetWall() {
-  data.wall.bricksInCurrent = 0;
-  saveData();
-  render();
-}
-
-function completeWall() {
-  if (data.wall.bricksInCurrent === NUM_BRICKS) {
-    data.wall.wallsCompleted = (data.wall.wallsCompleted || 0) + 1;
-    data.wall.bricksInCurrent = 0;
-    saveData();
-    render();
-  } else {
-    alert('Fill all 12 bricks before marking the wall complete.');
-  }
-}
-
-// Shrine rendering
-
-function renderShrine() {
-  const altar = document.getElementById('shrineAltarEmojis');
-  const grid = document.getElementById('shrineItemsGrid');
-  if (!altar || !grid) return;
-  altar.innerHTML = '';
-  grid.innerHTML = '';
-
-  const placedSet = new Set(data.shrine.placed || []);
-
-  // Altar emojis
-  SHRINE_ITEMS.forEach(item => {
-    if (placedSet.has(item.id)) {
-      const span = document.createElement('span');
-      span.textContent = item.emoji;
-      altar.appendChild(span);
-    }
-  });
-  if (!altar.childNodes.length) {
-    const span = document.createElement('span');
-    span.style.opacity = '0.6';
-    span.style.fontSize = '0.8rem';
-    span.textContent = 'Tap an unlocked item below to place it.';
-    altar.appendChild(span);
-  }
-
-  // Grid
-  SHRINE_ITEMS.forEach((item, index) => {
-    const unlocked = data.shrine.level > index;
-    const active = placedSet.has(item.id);
-    const div = document.createElement('div');
-    div.className = 'shrine-item' + (unlocked ? '' : ' locked') + (active ? ' active' : '');
-    div.dataset.id = item.id;
-    div.innerHTML = `
-      <div class="shrine-item-emoji">${item.emoji}</div>
-      <div class="shrine-item-label">${item.label}</div>
-    `;
-    if (unlocked) {
-      div.addEventListener('click', () => {
-        const id = item.id;
-        const set = new Set(data.shrine.placed || []);
-        if (set.has(id)) set.delete(id);
-        else set.add(id);
-        data.shrine.placed = Array.from(set);
-        saveData();
-        renderShrine();
-      });
-    }
-    grid.appendChild(div);
-  });
-}
-
-function attachShrineHandlers() {
-  const btnOpen = document.getElementById('btnShrineOpen');
-  const modal = document.getElementById('shrineModal');
-  const btnClose = document.getElementById('btnShrineClose');
-
-  if (btnOpen && modal) {
-    btnOpen.addEventListener('click', () => {
-      renderShrine();
-      modal.classList.add('visible');
-    });
-  }
-  if (btnClose && modal) {
-    btnClose.addEventListener('click', () => modal.classList.remove('visible'));
-  }
-  if (modal) {
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) modal.classList.remove('visible');
-    });
-  }
-}
-
-// Stats + chapter title
-
-function getChapterTitle(monthlyBlooms, monthlyWins, wallsCompleted) {
-  if (monthlyBlooms >= 20 && monthlyWins >= 80) return "Chapter: Month of Quiet Mastery";
-  if (monthlyBlooms >= 15 && monthlyWins >= 40) return "Chapter: Month of Soft Discipline";
-  if (monthlyBlooms >= 10 && monthlyWins < 40) return "Chapter: Month of Soft Presence";
-  if (wallsCompleted >= 3) return "Chapter: Month of Foundations";
-  if (monthlyWins >= 20 && monthlyBlooms < 7) return "Chapter: Month of Inner Grind";
-  return "Chapter: Month of Gentle Rebalancing";
-}
-
-function renderStats() {
-  const stats = document.getElementById('stats');
-  const chapterEl = document.getElementById('chapterTitle');
-  const weeklyGemFill = document.getElementById('weeklyGemFill');
-  const statGemText = document.getElementById('statGemText');
-  const weeklyGardenBed = document.getElementById('weeklyGardenBed');
-  const statGardenText = document.getElementById('statGardenText');
-
-  if (!stats) return;
-  stats.innerHTML = '';
-
-  const weeklyBlooms = sumForRange(7, 'bloom');
-  const weeklyWins = sumForRange(7, 'gemFacets');
-  const weeklyGemDays = countDaysWithGem(7);
-  const monthlyBlooms = sumForMonth('bloom');
-  const monthlyWins = sumForMonth('gemFacets');
-  const yearlyBlooms = sumForYear('bloom');
-  const yearlyWins = sumForYear('gemFacets');
-  const totalBricks = (data.wall.wallsCompleted || 0) * NUM_BRICKS + (data.wall.bricksInCurrent || 0);
-
-  const weekGemPercent = Math.min(100, (weeklyWins / (DAILY_GEM_TARGET * 7)) * 100);
-
-  if (chapterEl) {
-    chapterEl.textContent = getChapterTitle(monthlyBlooms, monthlyWins, data.wall.wallsCompleted || 0);
-  }
-  if (weeklyGemFill) {
-    weeklyGemFill.style.height = weekGemPercent + '%';
-  }
-  if (statGemText) statGemText.textContent = `${weeklyWins} little wins logged this week`;
-
-  if (weeklyGardenBed) {
-    weeklyGardenBed.innerHTML = '';
-    const keys = getRecentDayKeys(NUM_BLOOMS).reverse();
-    let bloomCount = 0;
-    keys.forEach(k => {
-      ensureDay(k);
-      const d = new Date(k);
-      const label = ['S','M','T','W','T','F','S'][d.getDay()];
-      const div = document.createElement('div');
-      div.className = 'weekly-garden-day';
-      const bloomed = data.days[k].bloom;
-      if (bloomed) bloomCount++;
-      div.innerHTML = `<span>${bloomed ? '🌸' : '🌱'}</span><span>${label}</span>`;
-      weeklyGardenBed.appendChild(div);
-    });
-    if (statGardenText) statGardenText.textContent = `${bloomCount}/${NUM_BLOOMS} blooms this week`;
-  }
-
-  const blocks = [
-    { title: 'This Week', text: `${weeklyBlooms} blooms • ${weeklyWins} wins • ${weeklyGemDays} gem days` },
-    { title: 'This Month', text: `${monthlyBlooms} blooms • ${monthlyWins} wins` },
-    { title: 'This Year', text: `${yearlyBlooms} blooms • ${yearlyWins} wins` },
-    { title: 'Brick Stats', text: `${totalBricks} bricks • ${data.wall.wallsCompleted || 0} walls completed` }
-  ];
-
-  blocks.forEach(b => {
-    const div = document.createElement('div');
-    div.className = 'stat-block';
-    div.innerHTML = `<strong>${b.title}</strong>${b.text}`;
-    stats.appendChild(div);
-  });
-}
-
-// Summary for GPT
-
-function generateSummary() {
-  const key = todayKey();
-  ensureDay(key);
-  const todayData = data.days[key];
-
-  const weeklyBlooms = sumForRange(7, 'bloom');
-  const weeklyWins = sumForRange(7, 'gemFacets');
-  const weeklyGemDays = countDaysWithGem(7);
-  const monthlyBlooms = sumForMonth('bloom');
-  const monthlyWins = sumForMonth('gemFacets');
-  const yearlyBlooms = sumForYear('bloom');
-  const yearlyWins = sumForYear('gemFacets');
-  const totalBricks = (data.wall.wallsCompleted || 0) * NUM_BRICKS + (data.wall.bricksInCurrent || 0);
-
-  const lines = [];
-
-  lines.push(`Regina Era Tracker Summary (Full V3)`);
-  lines.push(`Date: ${key}`);
-  lines.push('');
-  lines.push(`Today:`);
-  lines.push(`- Little wins logged today: ${todayData.gemFacets}`);
-  lines.push(`- Gem percent (0–100): ${Math.round(Math.min(todayData.gemFacets, DAILY_GEM_TARGET) / DAILY_GEM_TARGET * 100)}%`);
-  lines.push(`- Bloomed today: ${todayData.bloom ? 'yes' : 'no'}`);
-  if (todayData.gemNotes) lines.push(`- Gem notes: ${todayData.gemNotes}`);
-  if (todayData.gardenNotes) lines.push(`- Garden notes: ${todayData.gardenNotes}`);
-  if (todayData.brickNotes) lines.push(`- Brick notes: ${todayData.brickNotes}`);
-  if (todayData.auraNumbers && todayData.auraNumbers.length) {
-    lines.push(`- Angel numbers seen today: ${todayData.auraNumbers.join(', ')}`);
-  }
-  if (todayData.auraNote) {
-    lines.push(`- Aura orb journal: ${todayData.auraNote}`);
-  }
-  lines.push('');
-  lines.push(`This week:`);
-  lines.push(`- Bloom days: ${weeklyBlooms}/${NUM_BLOOMS}`);
-  lines.push(`- Total little wins logged: ${weeklyWins}`);
-  lines.push(`- Days you logged at least one win: ${weeklyGemDays}`);
-  lines.push('');
-  lines.push(`This month:`);
-  lines.push(`- Blooms: ${monthlyBlooms}`);
-  lines.push(`- Little wins: ${monthlyWins}`);
-  lines.push('');
-  lines.push(`This year:`);
-  lines.push(`- Blooms: ${yearlyBlooms}`);
-  lines.push(`- Little wins: ${yearlyWins}`);
-  lines.push('');
-  lines.push(`Bricks & walls:`);
-  lines.push(`- Bricks in current wall: ${data.wall.bricksInCurrent}/${NUM_BRICKS}`);
-  lines.push(`- Walls completed: ${data.wall.wallsCompleted || 0}`);
-  lines.push(`- Total bricks ever: ${totalBricks}`);
-  lines.push('');
-  lines.push(`Shrine:`);
-  lines.push(`- Shrine level (items unlocked): ${data.shrine.level}`);
-  if (data.shrine.placed && data.shrine.placed.length) {
-    lines.push(`- Items currently on altar: ${data.shrine.placed.join(', ')}`);
-  }
-  lines.push('');
-  lines.push(`Use this summary to update the Regina Era Tracker GPT so it can reflect today’s progress, patterns, angel numbers, shrine unlocks, and how your gem, garden, and walls are growing.`);
-
-  const summaryOutput = document.getElementById('summaryOutput');
-  if (summaryOutput) summaryOutput.value = lines.join('\n');
-}
-
-function copySummary() {
-  const summaryOutput = document.getElementById('summaryOutput');
-  if (!summaryOutput || !summaryOutput.value) return;
-  summaryOutput.select();
-  summaryOutput.setSelectionRange(0, 99999);
-  try {
-    document.execCommand('copy');
-  } catch (e) {}
-}
-
-// Notes + actions
-
-function attachNoteListeners() {
-  const gemNotes = document.getElementById('gemNotes');
-  const gardenNotes = document.getElementById('gardenNotes');
-  const brickNotes = document.getElementById('brickNotes');
-
-  if (gemNotes) {
-    gemNotes.addEventListener('input', () => {
-      const key = todayKey();
-      ensureDay(key);
-      data.days[key].gemNotes = gemNotes.value;
-      saveData();
-    });
-  }
-
-  if (gardenNotes) {
-    gardenNotes.addEventListener('input', () => {
-      const key = todayKey();
-      ensureDay(key);
-      data.days[key].gardenNotes = gardenNotes.value;
-      saveData();
-    });
-  }
-
-  if (brickNotes) {
-    brickNotes.addEventListener('input', () => {
-      const key = todayKey();
-      ensureDay(key);
-      data.days[key].brickNotes = brickNotes.value;
-      saveData();
-    });
-  }
-}
-
-function attachQuickActions() {
-  const container = document.querySelector('.quick-actions');
-  if (!container) return;
-  container.addEventListener('click', (e) => {
-    const btn = e.target.closest('button[data-action]');
-    if (!btn) return;
-    addGemWin();
-  });
-}
-
-// Tarot modal only
-
-function attachCardHandlers() {
-  const tarotCard = document.getElementById('tarotCard');
-  const btnExpand = document.getElementById('btnCardExpand');
-  const modal = document.getElementById('cardModal');
-  const btnClose = document.getElementById('btnCardClose');
-
-  function openModal() {
-    if (modal) modal.classList.add('visible');
-  }
-
-  if (tarotCard) {
-    tarotCard.addEventListener('click', openModal);
-  }
-
-  if (btnExpand) {
-    btnExpand.addEventListener('click', openModal);
-  }
-
-  if (btnClose && modal) {
-    btnClose.addEventListener('click', () => modal.classList.remove('visible'));
-  }
-
-  if (modal) {
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) modal.classList.remove('visible');
-    });
-  }
-}
-
-// Main render
-
-function render() {
-  const today = todayKey();
-  ensureDay(today);
-
-  const todayLabel = document.getElementById('todayLabel');
-  if (todayLabel) {
-    const d = new Date(today);
-    todayLabel.textContent = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-  }
-
-  // Tarot
-  renderTarotCard();
-
-  // Aura orb
-  renderAuraOrb();
-
-  // Gem
-  const gemRow = document.getElementById('gemRow');
-  const gemFill = document.getElementById('gemFill');
-  const gemText = document.getElementById('gemText');
-  const gemVisualFill = document.getElementById('gemVisualFill');
-
-  gemRow.innerHTML = '';
-  const winsToday = data.days[today].gemFacets || 0;
-  const cappedWins = Math.min(winsToday, DAILY_GEM_TARGET);
-  const gemPercent = (cappedWins / DAILY_GEM_TARGET) * 100;
-
-  for (let i = 0; i < NUM_FACETS; i++) {
-    const div = document.createElement('div');
-    const threshold = ((i + 1) / NUM_FACETS) * 100;
-    const filled = gemPercent >= threshold;
-    div.className = 'facet' + (filled ? ' filled' : '');
-    div.textContent = filled ? '💎' : '◇';
-    div.onclick = addGemWin;
-    gemRow.appendChild(div);
-  }
-
-  gemFill.style.width = gemPercent + '%';
-  gemFill.className = 'progress-fill gem-fill';
-  if (gemPercent >= 100) gemFill.classList.add('level-4');
-  else if (gemPercent >= 75) gemFill.classList.add('level-3');
-  else if (gemPercent >= 50) gemFill.classList.add('level-2');
-  else if (gemPercent >= 25) gemFill.classList.add('level-1');
-
-  if (gemVisualFill) {
-    gemVisualFill.style.height = gemPercent + '%';
-  }
-
-  gemText.textContent = `Little wins: ${winsToday} • Gem ${Math.round(gemPercent)}% charged`;
-
-  // Notes
-  const gemNotes = document.getElementById('gemNotes');
-  const gardenNotes = document.getElementById('gardenNotes');
-  const brickNotes = document.getElementById('brickNotes');
-  if (gemNotes) gemNotes.value = data.days[today].gemNotes || '';
-  if (gardenNotes) gardenNotes.value = data.days[today].gardenNotes || '';
-  if (brickNotes) brickNotes.value = data.days[today].brickNotes || '';
-
-  // Garden row (last 7 days) + visual plot
-  const gardenRow = document.getElementById('gardenRow');
-  const gardenPlot = document.getElementById('gardenPlot');
-  gardenRow.innerHTML = '';
-  gardenPlot.innerHTML = '';
-
-  const keys = getRecentDayKeys(NUM_BLOOMS).reverse();
-  let bloomsCount = 0;
-  keys.forEach((k) => {
-    ensureDay(k);
-    const d = new Date(k);
-    const label = ['S','M','T','W','T','F','S'][d.getDay()];
-    const isToday = k === today;
-    const filled = data.days[k].bloom;
-    if (filled) bloomsCount++;
-
-    const div = document.createElement('div');
-    div.className = 'bloom' + (filled ? ' filled' : '');
-    div.title = `${k} (${label})`;
-    div.textContent = filled ? '🌸' : (isToday ? '🌱' : '⚪');
-    if (isToday) {
-      div.onclick = toggleTodayBloom;
-    }
-    gardenRow.appendChild(div);
-
-    const plotDay = document.createElement('div');
-    plotDay.className = 'garden-plot-day';
-    const flower = document.createElement('div');
-    flower.className = 'garden-plot-flower';
-    flower.textContent = filled ? '🌺' : (isToday ? '🌱' : '🍂');
-    const lab = document.createElement('div');
-    lab.className = 'garden-plot-label';
-    lab.textContent = label;
-    plotDay.appendChild(flower);
-    plotDay.appendChild(lab);
-    gardenPlot.appendChild(plotDay);
-  });
-
-  const gardenFill = document.getElementById('gardenFill');
-  const gardenText = document.getElementById('gardenText');
-  const gardenPercent = (bloomsCount / NUM_BLOOMS) * 100;
-  gardenFill.style.width = gardenPercent + '%';
-  gardenText.textContent = `${bloomsCount}/${NUM_BLOOMS} days blooming this week`;
-
-  // Brick row
-  const brickRow = document.getElementById('brickRow');
-  brickRow.innerHTML = '';
-  const bricksInCurrent = data.wall.bricksInCurrent || 0;
-  for (let i = 0; i < NUM_BRICKS; i++) {
-    const div = document.createElement('div');
-    const filled = i < bricksInCurrent;
-    div.className = 'brick' + (filled ? ' filled' : '');
-    div.textContent = filled ? '🧱' : '⚪';
-    div.onclick = () => setBricksInCurrent(i + 1 === bricksInCurrent ? 0 : i + 1);
-    brickRow.appendChild(div);
-  }
-  const brickFill = document.getElementById('brickFill');
-  const brickText = document.getElementById('brickText');
-  const brickPercent = (bricksInCurrent / NUM_BRICKS) * 100;
-  brickFill.style.width = brickPercent + '%';
-  brickText.textContent = `${bricksInCurrent}/${NUM_BRICKS} bricks in this wall`;
-
-  const badges = document.getElementById('brickBadges');
-  badges.innerHTML = '';
-  if (data.wall.wallsCompleted > 0) {
-    const b = document.createElement('div');
-    b.className = 'badge';
-    b.innerHTML = `🧱 Foundation Level Up × ${data.wall.wallsCompleted}`;
-    badges.appendChild(b);
-  }
-
-  renderStats();
-}
-
-// Init
-
-document.addEventListener('DOMContentLoaded', () => {
-  render();
-  attachNoteListeners();
-  attachQuickActions();
-  attachCardHandlers();
-  attachOrbHandlers();
-  attachShrineHandlers();
-
-  // Buttons
-  const btnGemFull = document.getElementById('btnGemFull');
-  const btnGemReset = document.getElementById('btnGemReset');
-  const btnBloomToday = document.getElementById('btnBloomToday');
-  const btnNewWeek = document.getElementById('btnNewWeek');
-  const btnWallComplete = document.getElementById('btnWallComplete');
-  const btnWallReset = document.getElementById('btnWallReset');
-  const btnBrickAdd = document.getElementById('btnBrickAdd');
-  const btnGenerateSummary = document.getElementById('btnGenerateSummary');
-  const btnCopySummary = document.getElementById('btnCopySummary');
-
-  if (btnGemFull) btnGemFull.addEventListener('click', () => setGemWins(DAILY_GEM_TARGET));
-  if (btnGemReset) btnGemReset.addEventListener('click', () => setGemWins(0));
-  if (btnBloomToday) btnBloomToday.addEventListener('click', toggleTodayBloom);
-  if (btnNewWeek) btnNewWeek.addEventListener('click', resetWeek);
-  if (btnWallComplete) btnWallComplete.addEventListener('click', completeWall);
-  if (btnWallReset) btnWallReset.addEventListener('click', resetWall);
-  if (btnBrickAdd) btnBrickAdd.addEventListener('click', () => {
-    const current = data.wall.bricksInCurrent || 0;
-    if (current < NUM_BRICKS) {
-      data.wall.bricksInCurrent = current + 1;
-      saveData();
-      render();
-    }
-  });
-  if (btnGenerateSummary) btnGenerateSummary.addEventListener('click', generateSummary);
-  if (btnCopySummary) btnCopySummary.addEventListener('click', copySummary);
-});
-script.js
-/* ADDITION: Helpers appended to the end of script.js
-   - safe migration for auraLogRaw
-   - updateGemVisual
-   - logAuraNumberForToday / compute dominant aura
-   - small bloom trigger helper
-*/
-
-/* ANGEL_MEANINGS: short sample messages per base digit */
-const ANGEL_MEANINGS = {
-  2: [
-    "Support is here; let your roots deepen.",
-    "Balance your soft yes with a gentle no.",
-    "Trust small consistent steps."
-  ],
-  3: [
-    "Creative spark — open to small experiments.",
-    "Speak your truth kindly; ideas will follow.",
-    "Play and curiosity will lead you forward."
-  ],
-  4: [
-    "Grounding energy — tend your foundations.",
-    "Practical care now pays off in calm later.",
-    "Slow, steady work builds lasting comfort."
-  ],
-  5: [
-    "Change is active; lean into curiosity.",
-    "A shift invites new options — try one small pivot.",
-    "Movement and adaptability will serve you."
-  ]
-};
-
-/* Safe migration: ensure auraLogRaw exists without removing existing auraNumbers
-   This will run once on load if needed. */
-(function ensureMigration() {
-  if (!data || !data.days) return;
-  let migrated = false;
-  for (const key of Object.keys(data.days)) {
-    const day = data.days[key];
-    if (!Array.isArray(day.auraLogRaw)) {
-      // If there's an existing auraNumbers array, copy it into auraLogRaw (preserve chronological)
-      day.auraLogRaw = Array.isArray(day.auraNumbers) ? day.auraNumbers.slice() : [];
-      migrated = true;
-    }
-  }
-  if (migrated) {
-    try { saveData(); } catch(e) { /* swallow */ }
-  }
-})();
-
-/* utility: normalize a logged aura string like '222' or 222 to base digit (2..5) */
-function baseDigitFromString(val) {
-  const s = String(val).trim();
-  if (!s) return null;
-  // find the first repeating character if all are the same (e.g., '222' -> '2'), otherwise take last char
-  const firstChar = s[0];
-  if (s.split('').every(ch => ch === firstChar)) return parseInt(firstChar, 10);
-  // fallback: look for digit 2-5 in the string
-  const m = s.match(/[2-5]/);
-  return m ? parseInt(m[0], 10) : null;
-}
-
-/* log an aura number for today; adds to auraLogRaw and ensures unique auraNumbers set */
-function logAuraNumberForToday(numRaw) {
-  const key = todayKey();
-  ensureDay(key);
-  const day = data.days[key];
-
-  const normalized = String(numRaw).trim();
-  if (!normalized) return;
-
-  if (!Array.isArray(day.auraLogRaw)) day.auraLogRaw = [];
-  day.auraLogRaw.push(normalized);
-
-  // auraNumbers: unique base digits seen that day (2,3,4,5)
-  const base = baseDigitFromString(normalized);
-  if (base && !Array.isArray(day.auraNumbers)) day.auraNumbers = [];
-  if (base && !day.auraNumbers.includes(base)) day.auraNumbers.push(base);
-
-  // append a short message line to auraNote with chosen meaning
-  try {
-    const meanings = ANGEL_MEANINGS[base] || ["An angelic whisper."];
-    const msg = meanings[Math.floor(Math.random()*meanings.length)];
-    const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-    day.auraNote = (day.auraNote || "") + `[${time}] ${normalized}: ${msg}\n`;
-  } catch(e) {}
-
-  saveData();
-  applyAuraToDom(key);
-}
-
-/* compute dominant color class from auraLogRaw (most frequent base digit) */
-function computeAuraDominantClass(key) {
-  ensureDay(key);
-  const day = data.days[key];
-  if (!Array.isArray(day.auraLogRaw) || day.auraLogRaw.length === 0) return 'theme-neutral';
-
-  const counts = {2:0,3:0,4:0,5:0};
-  for (const raw of day.auraLogRaw) {
-    const b = baseDigitFromString(raw);
-    if (b >=2 && b <=5) counts[b] = (counts[b]||0) + 1;
-  }
-  // find highest
-  let topDigit = null;
-  let topCount = 0;
-  for (const d of [2,3,4,5]) {
-    if (counts[d] > topCount) {
-      topCount = counts[d];
-      topDigit = d;
-    }
-  }
-  if (!topDigit) return 'theme-neutral';
-  if (topDigit === 2) return 'theme-papaya';
-  if (topDigit === 3) return 'theme-fig';
-  if (topDigit === 4) return 'theme-vervain';
-  if (topDigit === 5) return 'theme-dusty';
-  return 'theme-neutral';
-}
-
-/* apply aura class to DOM orb and update title/tooltip */
-function applyAuraToDom(key) {
-  const orb = document.getElementById('auraOrb');
-  if (!orb) return;
-  const cls = computeAuraDominantClass(key);
-  orb.classList.remove('theme-papaya','theme-fig','theme-vervain','theme-dusty','theme-neutral');
-  orb.classList.add(cls);
-  // toggle halo opacity based on whether there are aura entries
-  ensureDay(key);
-  const day = data.days[key];
-  orb.style.transform = day.auraLogRaw && day.auraLogRaw.length ? 'scale(1.02)' : '';
-  orb.title = `Angel Aura Orb — ${day.auraLogRaw ? day.auraLogRaw.join(', ') : ''}`;
-}
-
-/* Update gem visuals (call this after changes to today's gem) */
-function updateGemVisual(key) {
-  const k = key || todayKey();
-  ensureDay(k);
-  const day = data.days[k];
-  const facets = Math.max(0, Math.min(NUM_FACETS, day.gemFacets || 0));
-  const percent = Math.min(100, Math.round((facets / DAILY_GEM_TARGET) * 100));
-  const fillEl = document.getElementById('gemFill');
-  const visualFill = document.getElementById('gemVisualFill');
-  if (fillEl) fillEl.style.width = percent + '%';
-  if (visualFill) {
-    visualFill.classList.remove('gem-shimmer','gem-full');
-    if (facets > 0) visualFill.classList.add('gem-shimmer');
-    if (facets >= DAILY_GEM_TARGET) {
-      // first time completion: increment shrine level once
-      if (!day.gemCompleted) {
-        day.gemCompleted = true;
-        data.shrine = data.shrine || { level: 0, placed: [] };
-        // increment but don't exceed available items
-        const newLevel = Math.min((data.shrine.level || 0) + 1, SHRINE_ITEMS.length);
-        data.shrine.level = newLevel;
-      }
-      visualFill.classList.add('gem-full');
-    } else {
-      day.gemCompleted = false;
-    }
-  }
-  saveData();
-}
-
-/* small helper to trigger bloom pop on elements that become bloomed
-   expects bloom tiles to addClass 'bloomed' — this will make sure animation runs */
-function triggerBloomAnimation(tileEl) {
-  if (!tileEl) return;
-  tileEl.classList.remove('bloomed');
-  // force reflow to restart animation
-  // eslint-disable-next-line no-unused-expressions
-  tileEl.offsetWidth;
-  tileEl.classList.add('bloomed');
-}
-
-/* wire a click on the orb to open a small prompt for quick testing (non-blocking)
-   This is intentionally minimal: replace with your modal integration as needed */
-document.addEventListener('DOMContentLoaded', function () {
-  // apply aura for today on load
-  applyAuraToDom(todayKey());
-
-  const orb = document.getElementById('auraOrb');
-  if (orb) {
-    orb.addEventListener('click', function () {
-      const val = prompt('Log an angel number (e.g., 222, 333, 444, 555):');
-      if (val) {
-        logAuraNumberForToday(val);
-        applyAuraToDom(todayKey());
-        alert('Logged ' + val);
-      }
-    });
-  }
-
-  // initial gem visual sync
-  updateGemVisual(todayKey());
-
-  // observe possible gem DOM button actions if present (non intrusive)
-  document.addEventListener('click', function (e) {
-    const t = e.target;
-    if (!t) return;
-    // example small convenience: if a button has data-action="addGem" we'll increment gem
-    if (t.dataset && t.dataset.action === 'addGem') {
-      const k = todayKey();
-      ensureDay(k);
-      data.days[k].gemFacets = (data.days[k].gemFacets || 0) + 1;
-      saveData();
-      updateGemVisual(k);
-    }
-    // if a bloom toggle button (data-action="bloomToday"), mark today's bloom and trigger animation
-    if (t.dataset && t.dataset.action === 'bloomToday') {
-      const k = todayKey();
-      ensureDay(k);
-      data.days[k].bloom = true;
-      saveData();
-      // try to find a tile for today and animate
-      const tile = document.querySelector('.bloom-tile.today');
-      if (tile) triggerBloomAnimation(tile);
-    }
-  });
-});
-/* ADDITION: Event wiring and interactive functions appended to the end of script.js
-   - renderGem, add/mark/reset gem
-   - renderGarden and bloom toggles
-   - renderWall and brick controls
-   - deterministic tarot rendering + modal
-   - orb modal + parsing/generation helpers
-   - computeAuraDominantClass and applyAuraToDom
-*/
-
-/* Angel meanings used for orb journal lines (kept small) */
-const ANGEL_MEANINGS = {
-  2: [
-    "Support is here; let your roots deepen.",
-    "Balance your soft yes with a gentle no.",
-    "Trust small, consistent steps."
-  ],
-  3: [
-    "Creative spark — open to small experiments.",
-    "Speak your truth kindly; ideas will follow.",
-    "Play and curiosity will lead you forward."
-  ],
-  4: [
-    "Grounding energy — tend your foundations.",
-    "Practical care now pays off in calm later.",
-    "Slow, steady work builds lasting comfort."
-  ],
-  5: [
-    "Change is active; lean into curiosity.",
-    "A shift invites new options — try one small pivot.",
-    "Movement and adaptability will serve you."
-  ]
-};
-
-/* Helper: base digit from repeating-digit strings or numeric strings */
-function baseDigitFromString(val) {
-  if (val === null || val === undefined) return null;
-  const s = String(val).trim();
-  if (!s) return null;
-  const first = s[0];
-  if (s.split('').every(ch => ch === first)) {
-    const n = parseInt(first, 10);
-    return (n >= 2 && n <= 5) ? n : null;
-  }
-  const m = s.match(/[2-5]/);
-  return m ? parseInt(m[0], 10) : null;
-}
-
-/* compute dominant class from auraLogRaw */
-function computeAuraDominantClassForDay(dayObj) {
-  if (!dayObj || !Array.isArray(dayObj.auraLogRaw) || dayObj.auraLogRaw.length === 0) return 'theme-neutral';
-  const counts = {2:0,3:0,4:0,5:0};
-  for (const raw of dayObj.auraLogRaw) {
-    const d = baseDigitFromString(raw);
-    if (d >=2 && d <=5) counts[d]++;
-  }
-  let max = 0, top = null;
-  for (const k of [2,3,4,5]) {
-    if (counts[k] > max) { max = counts[k]; top = k; }
-  }
-  if (!top) return 'theme-neutral';
-  return top === 2 ? 'theme-papaya'
-       : top === 3 ? 'theme-fig'
-       : top === 4 ? 'theme-vervain'
-       : top === 5 ? 'theme-dusty'
-       : 'theme-neutral';
-}
-
-/* apply aura theme and tooltip to orb based on today's data */
-function applyAuraToDomForKey(key) {
-  ensureDay(key);
-  const day = data.days[key];
-  const orb = document.getElementById('auraOrb');
-  if (!orb) return;
-  // remove known theme classes
-  orb.classList.remove('theme-papaya','theme-fig','theme-vervain','theme-dusty','theme-neutral');
-  const cls = computeAuraDominantClassForDay(day);
-  orb.classList.add(cls);
-  // set tooltip and small transform for presence
-  const rawList = Array.isArray(day.auraLogRaw) ? day.auraLogRaw.join(', ') : '';
-  orb.title = `Angel Aura Orb — ${rawList}`;
-  orb.style.transform = (rawList && rawList.length) ? 'scale(1.03)' : '';
-}
-
-/* -------------------- GEM -------------------- */
-function renderGem(key) {
-  const k = key || todayKey();
-  ensureDay(k);
-  const day = data.days[k];
-  const fillEl = document.getElementById('gemFill');
-  const visualFill = document.getElementById('gemVisualFill');
-  const countLabel = document.getElementById('gemCountLabel');
-  const facets = Math.max(0, day.gemFacets || 0);
-  const percent = Math.min(100, Math.round((facets / DAILY_GEM_TARGET) * 100));
-  if (fillEl) fillEl.style.width = percent + '%';
-  if (visualFill) {
-    visualFill.classList.remove('gem-shimmer', 'gem-full');
-    if (facets > 0) visualFill.classList.add('gem-shimmer');
-    if (facets >= DAILY_GEM_TARGET) visualFill.classList.add('gem-full');
-  }
-  if (countLabel) countLabel.textContent = `${facets} / ${DAILY_GEM_TARGET} wins`;
-  // persist minor normalization
-  if (typeof day.gemFacets !== 'number') day.gemFacets = facets;
-  saveData();
-}
-
-/* Actions */
-function addGemAction() {
-  const k = todayKey();
-  ensureDay(k);
-  data.days[k].gemFacets = (data.days[k].gemFacets || 0) + 1;
-  // cap to reasonable value but allow overshooting
-  saveData();
-  // mark completion if >= target and not previously completed
-  if (data.days[k].gemFacets >= DAILY_GEM_TARGET && !data.days[k].gemCompleted) {
-    data.days[k].gemCompleted = true;
-    data.shrine = data.shrine || { level: 0, placed: [] };
-    data.shrine.level = Math.min((data.shrine.level || 0) + 1, SHRINE_ITEMS.length);
-    saveData();
-  }
-  renderGem(k);
-}
-
-function markGemFullAction() {
-  const k = todayKey();
-  ensureDay(k);
-  data.days[k].gemFacets = DAILY_GEM_TARGET;
-  if (!data.days[k].gemCompleted) {
-    data.days[k].gemCompleted = true;
-    data.shrine = data.shrine || { level: 0, placed: [] };
-    data.shrine.level = Math.min((data.shrine.level || 0) + 1, SHRINE_ITEMS.length);
-  }
-  saveData();
-  renderGem(k);
-}
-
-function resetTodayGemAction() {
-  const k = todayKey();
-  ensureDay(k);
-  data.days[k].gemFacets = 0;
-  data.days[k].gemCompleted = false;
-  saveData();
-  renderGem(k);
-}
-
-/* -------------------- GARDEN -------------------- */
-function renderGarden() {
-  const bed = document.getElementById('gardenBed');
-  if (!bed) return;
-  bed.innerHTML = '';
-  // build last 7 days including today
-  const out = [];
-  for (let i = NUM_BLOOMS - 1; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    const key = d.toISOString().slice(0,10);
-    ensureDay(key);
-    const day = data.days[key];
-    const tile = document.createElement('div');
-    tile.className = 'bloom-tile';
-    if (key === todayKey()) tile.classList.add('today');
-    if (day.bloom) tile.classList.add('bloomed');
-    // small label for day name
-    const label = d.toLocaleDateString(undefined, {weekday:'short'});
-    tile.textContent = label;
-    tile.dataset.date = key;
-    tile.addEventListener('click', function () {
-      toggleBloomForDay(key, tile);
-    });
-    bed.appendChild(tile);
-    out.push(tile);
-  }
-}
-
-function toggleBloomForDay(key, tileEl) {
-  ensureDay(key);
-  const day = data.days[key];
-  day.bloom = !day.bloom;
-  saveData();
-  if (day.bloom) {
-    // animate
-    tileEl.classList.remove('bloomed');
-    // force reflow then add
-    void tileEl.offsetWidth;
-    tileEl.classList.add('bloomed');
-  } else {
-    tileEl.classList.remove('bloomed');
-  }
-  // reflect any dom-specific changes
-  applyAuraToDomForKey(todayKey());
-}
-
-/* Bloom today helper */
-function bloomTodayAction() {
-  const k = todayKey();
-  ensureDay(k);
-  data.days[k].bloom = true;
-  saveData();
-  renderGarden();
-}
-
-/* -------------------- BRICK WALL -------------------- */
-function renderWall() {
-  const container = document.getElementById('wallContainer');
-  const meta = document.getElementById('wallMeta');
-  if (!container) return;
-  container.innerHTML = '';
-  data.wall = data.wall || { bricksInCurrent:0, wallsCompleted:0 };
-  const count = data.wall.bricksInCurrent || 0;
-  for (let i = 0; i < NUM_BRICKS; i++) {
-    const b = document.createElement('div');
-    b.className = 'brick' + (i < count ? ' filled' : '');
-    b.textContent = i < count ? '\u25A0' : '';
-    container.appendChild(b);
-  }
-  if (meta) meta.textContent = `Walls: ${data.wall.wallsCompleted || 0} • Bricks: ${count}`;
-}
-
-function addBrickAction() {
-  data.wall = data.wall || { bricksInCurrent:0, wallsCompleted:0 };
-  data.wall.bricksInCurrent = (data.wall.bricksInCurrent || 0) + 1;
-  if (data.wall.bricksInCurrent >= NUM_BRICKS) {
-    data.wall.wallsCompleted = (data.wall.wallsCompleted || 0) + 1;
-    data.wall.bricksInCurrent = 0;
-  }
-  saveData();
-  renderWall();
-}
-
-function resetWallAction() {
-  data.wall = data.wall || { bricksInCurrent:0, wallsCompleted:0 };
-  data.wall.bricksInCurrent = 0;
-  saveData();
-  renderWall();
-}
-
-/* -------------------- TAROT -------------------- */
-
-/* deterministic choice for today's tarot: use date as simple seed */
-function tarotIndexForDateKey(key) {
-  const d = new Date(key + 'T00:00:00');
-  const idx = (d.getFullYear() * 10000 + (d.getMonth()+1) * 100 + d.getDate());
-  return idx % TAROT_CARDS.length;
-}
-
-function renderTarot() {
-  const key = todayKey();
-  ensureDay(key);
-  const day = data.days[key];
-  if (!day.tarotId) {
-    const idx = tarotIndexForDateKey(key);
-    day.tarotId = TAROT_CARDS[idx] && TAROT_CARDS[idx].id ? TAROT_CARDS[idx].id : idx;
-    saveData();
-  }
-  const cardObj = TAROT_CARDS.find(c => c.id === day.tarotId) || TAROT_CARDS[tarotIndexForDateKey(key)];
-  if (!cardObj) return;
-  const shortTitle = document.getElementById('tarotTitleShort');
-  const glyph = document.getElementById('tarotArtGlyph');
-  const tagline = document.getElementById('tarotTaglineShort');
-  if (shortTitle) shortTitle.textContent = cardObj.title || cardObj.name || 'Daily Card';
-  if (glyph) glyph.textContent = cardObj.glyph || cardObj.symbol || '✶';
-  if (tagline) tagline.textContent = cardObj.tagline || cardObj.short || '';
-  // ensure expand button opens modal
-  const expand = document.getElementById('btnCardExpand');
-  if (expand) {
-    expand.removeEventListener('click', openTarotModal);
-    expand.addEventListener('click', openTarotModal);
-  }
-}
-
-function openTarotModal() {
-  const key = todayKey();
-  ensureDay(key);
-  const day = data.days[key];
-  const cardObj = TAROT_CARDS.find(c => c.id === day.tarotId) || TAROT_CARDS[tarotIndexForDateKey(key)];
-  if (!cardObj) return;
-  document.getElementById('tarotModalTitle').textContent = cardObj.title || cardObj.name || 'Card';
-  document.getElementById('tarotModalGlyph').textContent = cardObj.glyph || cardObj.symbol || '✶';
-  document.getElementById('tarotModalMeaning').textContent = cardObj.meaning || cardObj.description || '';
-  const modal = document.getElementById('tarotModal');
-  if (modal) modal.classList.remove('hidden');
-}
-
-function closeTarotModal() {
-  const modal = document.getElementById('tarotModal');
-  if (modal) modal.classList.add('hidden');
-}
-
-/* -------------------- ORB / AURA -------------------- */
-
-/* open orb modal and populate today's journal */
-function openOrbModal() {
-  const modal = document.getElementById('orbModal');
-  if (!modal) return;
-  const journal = document.getElementById('orbJournal');
-  ensureDay(todayKey());
-  const d = data.days[todayKey()];
-  if (journal) journal.textContent = d.auraNote || '';
-  modal.classList.remove('hidden');
-  const ta = document.getElementById('orbInput');
-  if (ta) ta.value = '';
-}
-
-/* close orb modal */
-function closeOrbModal() {
-  const modal = document.getElementById('orbModal');
-  if (!modal) return;
-  modal.classList.add('hidden');
-}
-
-/* parse input and generate one line per number, update auraLogRaw / auraNumbers / auraNote */
-function generateAuraReflection() {
-  const ta = document.getElementById('orbInput');
-  if (!ta) return;
-  const raw = ta.value || '';
-  if (!raw.trim()) return;
-  // split on comma or whitespace
-  const parts = raw.split(/[,|\s]+/).map(s => s.trim()).filter(Boolean);
-  if (!parts.length) return;
-  ensureDay(todayKey());
-  const day = data.days[todayKey()];
-  day.auraLogRaw = day.auraLogRaw || [];
-  day.auraNumbers = day.auraNumbers || [];
-  for (const p of parts) {
-    day.auraLogRaw.push(p);
-    const base = baseDigitFromString(p);
-    if (base && !day.auraNumbers.includes(base)) day.auraNumbers.push(base);
-    // pick random meaning
-    const choices = ANGEL_MEANINGS[base] || ["A gentle message arrives."];
-    const msg = choices[Math.floor(Math.random() * choices.length)];
-    const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-    day.auraNote = (day.auraNote || '') + `[${time}] ${p}: ${msg}\n`;
-  }
-  saveData();
-  applyAuraToDomForKey(todayKey());
-  // update journal UI
-  const journal = document.getElementById('orbJournal');
-  if (journal) journal.textContent = day.auraNote || '';
-  // close modal after update (or keep open if you prefer)
-  closeOrbModal();
-}
-
-/* -------------------- BOOTSTRAP: wire listeners on DOM ready -------------------- */
-document.addEventListener('DOMContentLoaded', function () {
-  // Ensure today's day exists
-  ensureDay(todayKey());
-
-  // wire gem controls
-  const btnAddGem = document.getElementById('btnAddGem');
-  const btnMarkGemFull = document.getElementById('btnMarkGemFull');
-  const btnResetGem = document.getElementById('btnResetGem');
-  if (btnAddGem) { btnAddGem.addEventListener('click', addGemAction); }
-  if (btnMarkGemFull) { btnMarkGemFull.addEventListener('click', markGemFullAction); }
-  if (btnResetGem) { btnResetGem.addEventListener('click', resetTodayGemAction); }
-
-  // garden
-  const btnBloomToday = document.getElementById('btnBloomToday');
-  if (btnBloomToday) btnBloomToday.addEventListener('click', bloomTodayAction);
-
-  // wall
-  const btnAddBrick = document.getElementById('btnAddBrick');
-  const btnResetWall = document.getElementById('btnResetWall');
-  if (btnAddBrick) btnAddBrick.addEventListener('click', addBrickAction);
-  if (btnResetWall) btnResetWall.addEventListener('click', resetWallAction);
-
-  // tarot modal close
-  const btnCloseTarot = document.getElementById('btnCloseTarot');
-  if (btnCloseTarot) btnCloseTarot.addEventListener('click', closeTarotModal);
-
-  // orb wiring: click on orb opens modal
-  const orb = document.getElementById('auraOrb');
-  if (orb) {
-    orb.addEventListener('click', function (e) {
-      openOrbModal();
-    });
-  }
-  const btnCloseOrb = document.getElementById('btnCloseOrb');
-  if (btnCloseOrb) btnCloseOrb.addEventListener('click', closeOrbModal);
-  const btnCancelAura = document.getElementById('btnCancelAura');
-  if (btnCancelAura) btnCancelAura.addEventListener('click', closeOrbModal);
-  const btnGenerateAura = document.getElementById('btnGenerateAura');
-  if (btnGenerateAura) btnGenerateAura.addEventListener('click', generateAuraReflection);
-
-  // initial renders
-  renderGem(todayKey());
+/* ---------------------------
+   Rendering functions
+   --------------------------- */
+function updateUI() {
+  renderGem();
   renderGarden();
   renderWall();
   renderTarot();
-  applyAuraToDomForKey(todayKey());
-});
-```
+  renderOrb();
+}
 
-What I changed and why (brief)
-- index.html: I added only the missing minimal DOM elements (buttons, containers, modals) required by the JS to function. I kept markup small and placed elements where they naturally belong (gem card, garden card, wall card, plus two lightweight modals).
-- style.css: Appended small styles for garden tiles, bricks, and modal windows so interactions look alive and the .bloomed, .filled, and modal states render cleanly.
-- script.js: Appended interactive functions and DOM wiring to restore expected behaviors for the gem, garden, bricks, tarot, and orb. These are additive — they use the same localStorage key and day structure. I added small helper functions to parse numbers, compute dominant aura classes, and manage modal open/close.
+/* ---------- GEM ---------- */
+function renderGem(dateKey = getTodayKey()) {
+  ensureGem(dateKey);
+  const elCount = document.getElementById('gemCount');
+  const elFill = document.getElementById('gemFill');
+  const elDiamond = document.getElementById('gemDiamond');
+  const notes = document.getElementById('gemNotes');
 
-Data safety
-- I preserved the existing localStorage key reginaEraTrackerFullV3 and the day's object shape where possible.
-- All updates use ensureDay(...) so older missing fields won't cause errors.
-- When marking gem as full the shrine.level increment is guarded to only fire once per day's first completion.
+  const wins = state.gem[dateKey].wins || 0;
+  if (elCount) elCount.textContent = `${wins} / ${GEM_TARGET}`;
+  if (notes) notes.value = state.gem[dateKey].notes || '';
 
-Wired functions and elements (explicit)
-- Gem:
-  - Elements: #btnAddGem, #btnMarkGemFull, #btnResetGem, #gemFill, #gemVisualFill, #gemCountLabel
-  - Functions wired: addGemAction, markGemFullAction, resetTodayGemAction, renderGem
-- Garden:
-  - Elements: #gardenBed, #btnBloomToday, each generated .bloom-tile (data-date)
-  - Functions wired: renderGarden, toggleBloomForDay, bloomTodayAction
-- Bricks:
-  - Elements: #wallContainer, #btnAddBrick, #btnResetWall, #wallMeta
-  - Functions wired: renderWall, addBrickAction, resetWallAction
-- Tarot:
-  - Elements: #tarotCard (existing), #btnCardExpand (existing), #tarotModal, #btnCloseTarot, #tarotTitleShort, #tarotArtGlyph, #tarotTaglineShort
-  - Functions wired: renderTarot, openTarotModal, closeTarotModal
-- Orb:
-  - Elements: #auraOrb (existing), #orbModal, #orbInput, #btnGenerateAura, #btnCloseOrb, #orbJournal
-  - Functions wired: openOrbModal, closeOrbModal, generateAuraReflection, applyAuraToDomForKey, computeAuraDominantClassForDay
+  // compute fill percent relative to target and set height
+  const pct = Math.max(0, Math.min(100, Math.round((wins / GEM_TARGET) * 100)));
+  if (elFill) elFill.style.height = pct + '%';
 
-Notes & next steps
-- I intentionally used prompt-free modal UI rather than window.prompt so the experience is nicer. You can replace the modal with your preferred UI/animation later.
-- If you want, I can:
-  - Add a small confirmation on reset actions.
-  - Improve gem facets visualization (show little diamonds) — currently the counter and progress bar are active.
-  - Replace the generic modal close/appearance with smoother transitions.
-- If anything in your repository already contained similar functions (e.g., some TAROT_CARDS definitions), these appended functions use those constants rather than redefining them.
+  // classes for shimmer / full
+  if (elDiamond) {
+    elDiamond.classList.toggle('shimmer', wins > 0 && wins < GEM_TARGET);
+    elDiamond.classList.toggle('full', wins >= GEM_TARGET);
+  }
+}
 
-If you'd like, I can now:
-- Produce a git-style patch/diff for these exact changes, or
-- Apply more visual polish (shimmer/pulse timings, bloom scale) — tell me which element and the exact feel you want (e.g., "slower shimmer when <50%, stronger at 100%").
+function gemAdd() {
+  const key = getTodayKey();
+  ensureGem(key);
+  state.gem[key].wins = Math.min(GEM_TARGET, (state.gem[key].wins || 0) + 1);
+  saveState(); updateUI();
+}
+function gemSetFull(){
+  const key = getTodayKey();
+  ensureGem(key);
+  state.gem[key].wins = GEM_TARGET;
+  saveState(); updateUI();
+}
+function gemResetToday(){
+  const key = getTodayKey();
+  ensureGem(key);
+  state.gem[key].wins = 0;
+  state.gem[key].notes = '';
+  saveState(); updateUI();
+}
+
+/* save gem notes on blur */
+function gemNotesSave() {
+  const key = getTodayKey();
+  ensureGem(key);
+  const notes = document.getElementById('gemNotes');
+  if (!notes) return;
+  state.gem[key].notes = notes.value;
+  saveState();
+}
+
+/* ---------- GARDEN ---------- */
+function renderGarden() {
+  const row = document.getElementById('gardenRow');
+  if (!row) return;
+  row.innerHTML = '';
+  // render last 7 days ending with today
+  for (let i = NUM_BLOOMS - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = getTodayKey(d);
+    ensureGarden(key);
+    const plot = document.createElement('div');
+    plot.className = 'plot';
+    plot.dataset.date = key;
+    plot.textContent = new Date(key).toLocaleDateString(undefined, {weekday: 'short'});
+    if (state.garden[key].bloomed) {
+      plot.classList.add('bloomed');
+    }
+    plot.addEventListener('click', () => {
+      toggleBloom(key, plot);
+    });
+    row.appendChild(plot);
+  }
+}
+
+function toggleBloom(key, el) {
+  ensureGarden(key);
+  state.garden[key].bloomed = !state.garden[key].bloomed;
+  saveState();
+  if (state.garden[key].bloomed && el) {
+    el.classList.remove('animate');
+    void el.offsetWidth;
+    el.classList.add('animate'); // triggers pop animation
+    el.classList.add('bloomed');
+  } else if (el) {
+    el.classList.remove('bloomed');
+  }
+  updateUI();
+}
+function bloomToday() {
+  const key = getTodayKey();
+  ensureGarden(key);
+  state.garden[key].bloomed = true;
+  saveState(); updateUI();
+}
+
+/* ---------- WALL ---------- */
+function renderWall() {
+  const container = document.getElementById('wallGrid');
+  const label = document.getElementById('wallLabel');
+  const completed = document.getElementById('wallsCompleted');
+  if (!container) return;
+  container.innerHTML = '';
+  const count = state.bricks.currentBricks || 0;
+  for (let i = 0; i < NUM_BRICKS; i++) {
+    const b = document.createElement('div');
+    b.className = 'brick' + (i < count ? ' filled' : '');
+    b.textContent = (i < count) ? '' : '';
+    container.appendChild(b);
+  }
+  if (label) label.textContent = `${count} / ${NUM_BRICKS}`;
+  if (completed) completed.textContent = `Walls completed: ${state.bricks.wallsCompleted || 0}`;
+}
+
+function addBrick() {
+  state.bricks.currentBricks = Math.min(NUM_BRICKS, (state.bricks.currentBricks || 0) + 1);
+  saveState(); updateUI();
+}
+function completeWall() {
+  if ((state.bricks.currentBricks || 0) >= NUM_BRICKS) {
+    state.bricks.wallsCompleted = (state.bricks.wallsCompleted || 0) + 1;
+    state.bricks.currentBricks = 0;
+    saveState(); updateUI();
+  } else {
+    // if not full, do nothing (or we could prompt)
+    // For clarity, we simply set to full and complete
+    // but keep to spec: require 12 to complete
+    alert('You must have 12 bricks to complete the wall.');
+  }
+}
+function resetWall() {
+  state.bricks.currentBricks = 0;
+  saveState(); updateUI();
+}
+
+/* ---------- TAROT ---------- */
+function renderTarot(dateKey = getTodayKey()) {
+  ensureTarot(dateKey);
+  const cardField = document.getElementById('tarotCard');
+  const title = document.getElementById('tarotTitle');
+  const tagline = document.getElementById('tarotTagline');
+  const glyph = document.getElementById('tarotGlyph');
+
+  // choose deterministic card and persist for the day
+  if (!state.tarot[dateKey].cardId) {
+    const idx = tarotIndexForKey(dateKey);
+    state.tarot[dateKey].cardId = TAROT_CARDS[idx].id;
+    saveState();
+  }
+  const card = TAROT_CARDS.find(c => c.id === state.tarot[dateKey].cardId) || TAROT_CARDS[0];
+  if (title) title.textContent = card.title;
+  if (tagline) tagline.textContent = card.tagline;
+  if (glyph) glyph.textContent = card.glyph;
+}
+
+/* tarot modal */
+function openTarotModal() {
+  const key = getTodayKey();
+  ensureTarot(key);
+  const card = TAROT_CARDS.find(c => c.id === state.tarot[key].cardId) || TAROT_CARDS[0];
+  document.getElementById('modalTarotTitle').textContent = card.title;
+  document.getElementById('modalTarotGlyph').textContent = card.glyph;
+  document.getElementById('modalTarotMeaning').textContent = card.meaning;
+  document.getElementById('modalTarot').classList.remove('hidden');
+}
+function closeTarotModal() {
+  document.getElementById('modalTarot').classList.add('hidden');
+}
+
+/* ---------- ORB / AURA ---------- */
+function renderOrb() {
+  const orb = document.getElementById('auraOrb');
+  const summary = document.getElementById('auraSummary');
+  const today = getTodayKey();
+  ensureAura(today);
+  const btn = document.getElementById('btnOpenAura');
+
+  // compute unique numbers and dominant
+  const numbers = state.aura[today].numbers || [];
+  const log = state.aura[today].log || [];
+  const note = state.aura[today].note || '';
+  if (summary) {
+    if (numbers.length === 0) summary.textContent = 'No aura numbers logged today';
+    else summary.textContent = `Today: ${numbers.join(', ')}`;
+  }
+
+  // apply color classes or gradient depending on numbers
+  if (orb) {
+    orb.classList.remove('papaya','berry','vervain','dusty','pulse');
+    if (numbers.length === 0) {
+      // neutral default
+      orb.style.background = 'radial-gradient(circle at 30% 30%, rgba(189,104,9,0.95), rgba(154,63,74,0.9))';
+    } else {
+      // map base digits to colors and blend if multiple
+      const colorMap = { '2': 'var(--papaya)', '3': 'var(--berry)', '4': 'var(--vervain)', '5': 'var(--dusty-blue)' };
+      if (numbers.length === 1) {
+        const cls = numbers[0] === 2 ? 'papaya' : numbers[0] === 3 ? 'berry' : numbers[0] === 4 ? 'vervain' : 'dusty';
+        orb.classList.add(cls);
+        orb.classList.add('pulse');
+      } else {
+        // create a small gradient blend
+        const stops = numbers.map((n,i) => `${colorMap[String(n)]} ${Math.round((i/(numbers.length))*100)}%`);
+        orb.style.background = `linear-gradient(135deg, ${stops.join(',')})`;
+        orb.classList.add('pulse');
+      }
+    }
+  }
+
+  // update modal log if open
+  const logEl = document.getElementById('auraLog');
+  if (logEl) logEl.textContent = note || '';
+}
+
+/* parse a number string to its base digit (2-5) for repeating-digit forms */
+function baseDigit(s) {
+  if (s === null || s === undefined) return null;
+  const str = String(s).trim();
+  if (!str) return null;
+  // if all characters same (e.g., 222, 333)
+  if (str.split('').every(ch => ch === str[0])) {
+    const n = parseInt(str[0], 10);
+    if (n >= 2 && n <= 5) return n;
+  }
+  // fallback: find first digit 2-5
+  const m = str.match(/[2-5]/);
+  return m ? parseInt(m[0],10) : null;
+}
+
+/* open/close aura modal */
+function openAuraModal() {
+  const modal = document.getElementById('modalAura');
+  const input = document.getElementById('auraInput');
+  const today = getTodayKey();
+  ensureAura(today);
+  // populate log
+  document.getElementById('auraLog').textContent = state.aura[today].note || '';
+  if (modal) modal.classList.remove('hidden');
+  if (input) input.value = '';
+}
+function closeAuraModal() {
+  const modal = document.getElementById('modalAura');
+  if (modal) modal.classList.add('hidden');
+}
+
+/* Log aura numbers from input */
+function logAuraFromInput() {
+  const input = document.getElementById('auraInput');
+  if (!input) return;
+  const raw = input.value || '';
+  if (!raw.trim()) return;
+  // split by commas or whitespace
+  const parts = raw.split(/[,|\s]+/).map(s => s.trim()).filter(Boolean);
+  if (!parts.length) return;
+  const today = getTodayKey();
+  ensureAura(today);
+  for (const p of parts) {
+    state.aura[today].log.push(p);
+    const b = baseDigit(p);
+    if (b && !state.aura[today].numbers.includes(b)) state.aura[today].numbers.push(b);
+    // pick random meaning
+    const choices = ANGEL_MEANINGS[String(b)] || ['A gentle message arrives.'];
+    const msg = choices[Math.floor(Math.random() * choices.length)];
+    const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    state.aura[today].note += `[${time}] ${p}: ${msg}\n`;
+  }
+  saveState();
+  renderOrb();
+  // update modal log and close or keep open
+  document.getElementById('auraLog').textContent = state.aura[today].note;
+  // keep modal open for review
+}
+
+/* ---------- Wiring / Event listeners ---------- */
+function wire() {
+  // GEM
+  const btnAdd = document.getElementById('btnGemAdd');
+  const btnFull = document.getElementById('btnGemFull');
+  const btnReset = document.getElementById('btnGemReset');
+  const notes = document.getElementById('gemNotes');
+  if (btnAdd) btnAdd.addEventListener('click', gemAdd);
+  if (btnFull) btnFull.addEventListener('click', gemSetFull);
+  if (btnReset) btnReset.addEventListener('click', () => {
+    if (confirm('Reset today\'s gem?')) gemResetToday();
+  });
+  if (notes) {
+    notes.addEventListener('blur', gemNotesSave);
+    notes.addEventListener('change', gemNotesSave);
+  }
+
+  // GARDEN
+  const btnBloom = document.getElementById('btnBloomToday');
+  if (btnBloom) btnBloom.addEventListener('click', bloomToday);
+
+  // WALL
+  const btnAddBrick = document.getElementById('btnAddBrick');
+  const btnComplete = document.getElementById('btnCompleteWall');
+  const btnResetWall = document.getElementById('btnResetWall');
+  if (btnAddBrick) btnAddBrick.addEventListener('click', addBrick);
+  if (btnComplete) btnComplete.addEventListener('click', completeWall);
+  if (btnResetWall) btnResetWall.addEventListener('click', () => {
+    if (confirm('Reset current wall (this will clear current bricks)?')) resetWall();
+  });
+
+  // TAROT
+  const btnTarotOpen = document.getElementById('btnTarotOpen');
+  const btnTarotClose = document.getElementById('btnCloseTarot');
+  if (btnTarotOpen) btnTarotOpen.addEventListener('click', openTarotModal);
+  if (btnTarotClose) btnTarotClose.addEventListener('click', closeTarotModal);
+
+  // AURA
+  const orb = document.getElementById('auraOrb');
+  const btnOpenAura = document.getElementById('btnOpenAura');
+  const btnCloseAura = document.getElementById('btnCloseAura');
+  const btnLogAura = document.getElementById('btnLogAura');
+  const btnClearAuraInput = document.getElementById('btnClearAuraInput');
+
+  if (orb) orb.addEventListener('click', openAuraModal);
+  if (btnOpenAura) btnOpenAura.addEventListener('click', openAuraModal);
+  if (btnCloseAura) btnCloseAura.addEventListener('click', closeAuraModal);
+  if (btnLogAura) btnLogAura.addEventListener('click', () => {
+    logAuraFromInput();
+  });
+  if (btnClearAuraInput) btnClearAuraInput.addEventListener('click', () => {
+    const input = document.getElementById('auraInput');
+    if (input) input.value = '';
+  });
+
+  // modal close via overlay click (click outside panel)
+  document.querySelectorAll('.modal').forEach(modal => {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.classList.add('hidden');
+      }
+    });
+  });
+}
+
+/* ---------------------------
+   Init: ensure today's keys and render
+   --------------------------- */
+function init() {
+  // ensure today's shadow objects
+  const today = getTodayKey();
+  ensureGem(today);
+  ensureGarden(today);
+  ensureAura(today);
+  ensureTarot(today);
+
+  // wire UI
+  wire();
+
+  // initial render
+  updateUI();
+
+  // save initial state (in case defaults were added)
+  saveState();
+}
+
+/* start */
+document.addEventListener('DOMContentLoaded', init);
